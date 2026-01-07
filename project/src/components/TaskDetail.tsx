@@ -85,15 +85,19 @@ const TaskDetail: React.FC = () => {
         setAssignees(taskResult.assignees);
       }
 
-      // Load sessions - TODAS as sessões finalizadas para progresso ACUMULATIVO (não apenas hoje)
+      // Load FINISHED sessions - para progresso ACUMULATIVO (não apenas hoje)
       const sessionsResult = await timeEntriesService.getTaskSessions(tId, {
-        status: 'stopped'  // Apenas sessões finalizadas
+        status: 'stopped'  // Apenas sessões finalizadas para o progresso
       });
-      const allSessions = sessionsResult?.data || [];
-      setSessions(allSessions);
+      const finishedSessions = sessionsResult?.data || [];
+      setSessions(finishedSessions);
 
-      // Find active session
-      const active = allSessions.find((s) => s.status === 'running' || s.status === 'paused');
+      // Load ACTIVE sessions (running or paused) - são sessões não finalizadas
+      const activeSessionsResult = await timeEntriesService.getTaskSessions(tId);
+      const allSessionsIncludingActive = activeSessionsResult?.data || [];
+
+      // Find active session (running or paused) - vai estar na lista completa
+      const active = allSessionsIncludingActive.find((s) => s.status === 'running' || s.status === 'paused');
       setActiveSession(active || null);
 
       // Load day status
