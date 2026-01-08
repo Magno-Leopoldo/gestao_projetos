@@ -175,6 +175,8 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
       firstItem: chartData[0],
     });
 
+    let resultData: any[] = [];
+
     if (needsAggregation) {
       // Mode: Breakdown por usuário - agregar para gráfico, mas manter detalhes
       const aggregated = Object.values(
@@ -206,20 +208,28 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
         }, {})
       ).sort((a: any, b: any) => a.data.localeCompare(b.data));
 
-      console.log('✅ Dados agregados:', aggregated.slice(0, 3));
-      return aggregated;
-    } else {
-      // Mode: Sem breakdown (filtrado por usuário ou dados já agregados)
-      const formatted = chartData.map((item: any) => ({
-        data: item.data,
+      // ✅ IMPORTANTE: Normalizar dados agregados para garantir compatibilidade com Recharts
+      resultData = aggregated.map((item: any) => ({
+        data: String(item.data),
         horasReais: parseFloat(item.horasReais) || 0,
         horasSugeridas: parseFloat(item.horasSugeridas) || 0,
-        users: item.users || [], // Se houver users, manter
+        users: Array.isArray(item.users) ? item.users : [],
       }));
 
-      console.log('✅ Dados sem agregação:', formatted.slice(0, 3));
-      return formatted;
+      console.log('✅ Dados agregados:', resultData.slice(0, 3));
+    } else {
+      // Mode: Sem breakdown (filtrado por usuário ou dados já agregados)
+      resultData = chartData.map((item: any) => ({
+        data: String(item.data),
+        horasReais: parseFloat(item.horasReais) || 0,
+        horasSugeridas: parseFloat(item.horasSugeridas) || 0,
+        users: Array.isArray(item.users) ? item.users : [],
+      }));
+
+      console.log('✅ Dados sem agregação:', resultData.slice(0, 3));
     }
+
+    return resultData;
   })();
 
   // Debug final
@@ -386,6 +396,7 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
             <div className="bg-white rounded-lg border border-gray-200 p-6">
               <ResponsiveContainer width="100%" height={550}>
                 <LineChart
+                  key={`chart-${selectedUser || 'todos'}-${period}`}
                   data={formattedData}
                   margin={{ top: 20, right: 120, left: 20, bottom: 20 }}
                   onMouseMove={(state: any) => {
