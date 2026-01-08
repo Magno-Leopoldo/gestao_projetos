@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Plus } from 'lucide-react';
+import { Plus, Search, X } from 'lucide-react';
 import { Task, TaskStatus, PRIORITY_LABELS, PRIORITY_COLORS, STATUS_LABELS, STATUS_COLORS } from '../types';
 import { tasksService } from '../services/tasksService';
 import { projectsService } from '../services/projectsService';
@@ -9,6 +9,11 @@ import { useAuth } from '../contexts/AuthContext';
 import CreateTaskModal from './CreateTaskModal';
 
 type SortBy = 'order' | 'status' | 'priority' | 'estimated_hours';
+
+interface TaskUser {
+  id: number;
+  name: string;
+}
 
 const TasksList: React.FC = () => {
   const navigate = useNavigate();
@@ -21,6 +26,9 @@ const TasksList: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortBy>('order');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [searchText, setSearchText] = useState<string>('');
+  const [selectedUser, setSelectedUser] = useState<number | null>(null);
+  const [availableUsers, setAvailableUsers] = useState<TaskUser[]>([]);
 
   useEffect(() => {
     if (projectId && stageId) {
@@ -61,6 +69,28 @@ const TasksList: React.FC = () => {
       // Se é supervisor ou admin: mostra todas as tarefas
 
       setTasks(filteredTasks);
+
+      // ✅ Extrair usuários únicos para o filtro
+      const usersMap = new Map<number, TaskUser>();
+      filteredTasks.forEach((task: any) => {
+        if (task.assignee_ids) {
+          const assigneeIds = task.assignee_ids
+            .toString()
+            .split(',')
+            .map((id: string) => parseInt(id.trim()));
+
+          assigneeIds.forEach((id: number) => {
+            if (!usersMap.has(id) && task.assignee_names) {
+              // Tenta encontrar o nome correspondente
+              const names = task.assignee_names.toString().split(',');
+              usersMap.set(id, { id, name: names[0]?.trim() || `Usuário ${id}` });
+            }
+          });
+        }
+      });
+
+      const usersList = Array.from(usersMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+      setAvailableUsers(usersList);
     } catch (err: any) {
       const errorMsg = err.response?.data?.message || err.message || 'Erro ao carregar dados';
       setError(errorMsg);
@@ -95,8 +125,30 @@ const TasksList: React.FC = () => {
     return `P${pId}.E${sId}.T${taskId}`;
   };
 
-  const getSortedTasks = () => {
-    const sorted = [...tasks];
+  // ✅ NOVO: Filtrar por busca de texto e usuário, depois ordenar
+  const getFilteredAndSortedTasks = () => {
+    // 1. Filtrar por texto de busca (título e descrição)
+    let filtered = tasks.filter((task) => {
+      const searchLower = searchText.toLowerCase();
+      const titleMatch = task.title.toLowerCase().includes(searchLower);
+      const descriptionMatch = task.description?.toLowerCase().includes(searchLower) || false;
+      return titleMatch || descriptionMatch;
+    });
+
+    // 2. Filtrar por usuário selecionado
+    if (selectedUser) {
+      filtered = filtered.filter((task) => {
+        if (!task.assignee_ids) return false;
+        const assigneeIds = task.assignee_ids
+          .toString()
+          .split(',')
+          .map((id: string) => parseInt(id.trim()));
+        return assigneeIds.includes(selectedUser);
+      });
+    }
+
+    // 3. Ordenar
+    const sorted = [...filtered];
     switch (sortBy) {
       case 'order':
         return sorted.sort((a, b) => a.order - b.order);
@@ -175,25 +227,84 @@ const TasksList: React.FC = () => {
           )}
         </div>
 
-        {/* Sorting Controls */}
-        <div className="mb-6 flex gap-2 flex-wrap">
-          <span className="text-sm font-medium text-gray-700 self-center">Ordenar por:</span>
-          {(['order', 'status', 'priority', 'estimated_hours'] as SortBy[]).map((sort) => (
-            <button
-              key={sort}
-              onClick={() => setSortBy(sort)}
-              className={`px-3 py-2 rounded-lg font-medium transition-colors text-sm ${
-                sortBy === sort
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              {sort === 'order' && 'Ordem'}
-              {sort === 'status' && 'Status'}
-              {sort === 'priority' && 'Prioridade'}
-              {sort === 'estimated_hours' && 'Horas'}
-            </button>
-          ))}
+        {/* 🔍 Search and Filter Controls */}
+        <div className="mb-6 space-y-4">
+          {/* Search Bar */}
+          <div className="flex gap-3 flex-wrap">
+            <div className="flex-1 min-w-xs">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="🔍 Buscar por título ou descrição..."
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                />
+                {searchText && (
+                  <button
+                    onClick={() => setSearchText('')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* User Filter */}
+            {availableUsers.length > 0 && (
+              <div className="min-w-xs">
+                <select
+                  value={selectedUser || ''}
+                  onChange={(e) => setSelectedUser(e.target.value ? parseInt(e.target.value) : null)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                >
+                  <option value="">👥 Todos os usuários</option>
+                  {availableUsers.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Sorting Controls */}
+          <div className="flex gap-2 flex-wrap">
+            <span className="text-sm font-medium text-gray-700 self-center">Ordenar por:</span>
+            {(['order', 'status', 'priority', 'estimated_hours'] as SortBy[]).map((sort) => (
+              <button
+                key={sort}
+                onClick={() => setSortBy(sort)}
+                className={`px-3 py-2 rounded-lg font-medium transition-colors text-sm ${
+                  sortBy === sort
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {sort === 'order' && 'Ordem'}
+                {sort === 'status' && 'Status'}
+                {sort === 'priority' && 'Prioridade'}
+                {sort === 'estimated_hours' && 'Horas'}
+              </button>
+            ))}
+          </div>
+
+          {/* Active Filters Summary */}
+          {(searchText || selectedUser) && (
+            <div className="text-sm text-gray-600 p-3 bg-blue-50 rounded-lg border border-blue-200">
+              📋 Filtros ativos:
+              {searchText && <span className="ml-2 font-medium">Busca: &quot;{searchText}&quot;</span>}
+              {searchText && selectedUser && <span className="mx-1">•</span>}
+              {selectedUser && (
+                <span className="font-medium">
+                  Usuário: {availableUsers.find((u) => u.id === selectedUser)?.name}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Error Message */}
@@ -220,7 +331,7 @@ const TasksList: React.FC = () => {
         {/* Tasks List */}
         {!loading && tasks.length > 0 && (
           <div className="space-y-4">
-            {getSortedTasks().map((task) => {
+            {getFilteredAndSortedTasks().map((task) => {
               const riskIndicator = getRiskIndicator(task);
               return (
                 <div
@@ -331,11 +442,17 @@ const TasksList: React.FC = () => {
         )}
 
         {/* Empty State */}
-        {!loading && tasks.length === 0 && (
+        {!loading && getFilteredAndSortedTasks().length === 0 && (
           <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-            <div className="text-6xl mb-4">✓</div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Nenhuma tarefa encontrada</h3>
-            <p className="text-gray-600 mb-6">Esta etapa não possui tarefas definidas</p>
+            <div className="text-6xl mb-4">{searchText || selectedUser ? '🔍' : '✓'}</div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              {searchText || selectedUser ? 'Nenhuma tarefa encontrada' : 'Nenhuma tarefa nesta etapa'}
+            </h3>
+            <p className="text-gray-600 mb-6">
+              {searchText || selectedUser
+                ? 'Tente ajustar seus filtros ou critérios de busca'
+                : 'Esta etapa não possui tarefas definidas'}
+            </p>
 
             {canCreateTask ? (
               <button
