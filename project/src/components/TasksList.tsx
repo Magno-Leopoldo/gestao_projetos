@@ -73,17 +73,23 @@ const TasksList: React.FC = () => {
       // ✅ Extrair usuários únicos para o filtro
       const usersMap = new Map<number, TaskUser>();
       filteredTasks.forEach((task: any) => {
+        // Campo `assignees` vem do backend como "Id1,Id2,Id3" (GROUP_CONCAT de ids)
+        // Precisamos buscar o mapeamento id->nome
         if (task.assignee_ids) {
           const assigneeIds = task.assignee_ids
             .toString()
             .split(',')
             .map((id: string) => parseInt(id.trim()));
 
-          assigneeIds.forEach((id: number) => {
-            if (!usersMap.has(id) && task.assignee_names) {
-              // Tenta encontrar o nome correspondente
-              const names = task.assignee_names.toString().split(',');
-              usersMap.set(id, { id, name: names[0]?.trim() || `Usuário ${id}` });
+          // Campo `assignees` contém os nomes separados por vírgula
+          const assigneeNames = task.assignees
+            ? task.assignees.toString().split(',').map((n: string) => n.trim())
+            : [];
+
+          assigneeIds.forEach((id: number, index: number) => {
+            if (!usersMap.has(id)) {
+              const name = assigneeNames[index] || `Usuário ${id}`;
+              usersMap.set(id, { id, name });
             }
           });
         }
