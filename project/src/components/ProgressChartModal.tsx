@@ -257,6 +257,12 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
     dataDisplay: formatDateForDisplay(d.data),
   }));
 
+  console.log('📋 formattedData pronto:', {
+    length: formattedData.length,
+    first: formattedData[0],
+    data: formattedData,
+  });
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[95vh] overflow-y-auto">
@@ -393,18 +399,20 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
               <p className="text-gray-600 font-medium">Nenhum dado disponível para este período</p>
             </div>
           ) : (
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <ResponsiveContainer width="100%" height={550}>
-                <LineChart
-                  key={`chart-${selectedUser || 'todos'}-${period}`}
-                  data={formattedData}
-                  margin={{ top: 20, right: 120, left: 20, bottom: 20 }}
-                  onMouseMove={(state: any) => {
-                    if (state?.isTooltipActive) {
-                      console.log('🖱️ Hover ativo:', state?.activeTooltipIndex);
-                    }
-                  }}
-                >
+            <div className="bg-white rounded-lg border border-gray-200 p-6" style={{ position: 'relative', width: '100%' }}>
+              <div style={{ width: '100%', height: 550, position: 'relative' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    key={`chart-${selectedUser || 'todos'}-${period}-${formattedData.length}`}
+                    data={formattedData}
+                    margin={{ top: 20, right: 120, left: 20, bottom: 20 }}
+                    isAnimationActive={false}
+                    onMouseMove={(state: any) => {
+                      if (state?.isTooltipActive) {
+                        console.log('🖱️ Hover ativo:', state?.activeTooltipIndex);
+                      }
+                    }}
+                  >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis
                     dataKey="dataDisplay"
@@ -459,7 +467,8 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
                     isAnimationActive={false}
                   />
                 </LineChart>
-              </ResponsiveContainer>
+                </ResponsiveContainer>
+              </div>
             </div>
           )}
 
