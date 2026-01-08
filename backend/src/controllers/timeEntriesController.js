@@ -86,10 +86,10 @@ export const startTimeEntry = async (req, res, next) => {
       });
     }
 
-    // Criar nova sessão
+    // Criar nova sessão - garantir que duration_minutes e duration_total_seconds começam em 0
     const result = await query(
-      `INSERT INTO time_entries_sessions (task_id, user_id, start_time, status, notes)
-       VALUES (?, ?, NOW(), 'running', ?)`,
+      `INSERT INTO time_entries_sessions (task_id, user_id, start_time, status, notes, duration_minutes, duration_total_seconds)
+       VALUES (?, ?, NOW(), 'running', ?, 0, 0)`,
       [taskId, userId, notes || null]
     );
 
@@ -673,6 +673,130 @@ export const getUserDayStatus = async (req, res, next) => {
         user_name: user.full_name,
         date: new Date().toISOString().split('T')[0],
         ...summary,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// =====================================================
+// GET /api/tasks/:taskId/progress-chart
+// Obter dados de progresso por dia para gráfico
+// =====================================================
+export const getTaskProgressChart = async (req, res, next) => {
+  try {
+    const { taskId } = req.params;
+    const { user_id, period = 'all', start_date, end_date } = req.query;
+
+    // Verificar se tarefa existe
+    const [task] = await query('SELECT * FROM tasks WHERE id = ?', [taskId]);
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        error: 'NOT_FOUND',
+        message: 'Tarefa não encontrada',
+      });
+    }
+
+    // Construir query com filtros de data
+    let whereConditions = ['ts.task_id = ?', 'ts.status = ?'];
+    let params = [taskId, 'stopped'];
+
+    // Filtro por período
+    if (period === 'today') {
+      whereConditions.push('DATE(ts.created_at) = CURDATE()');
+    } else if (period === 'week') {
+      whereConditions.push('ts.created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)');
+    } else if (period === 'month') {
+      whereConditions.push('ts.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)');
+    } else if (period === 'custom' && start_date && end_date) {
+      whereConditions.push('DATE(ts.created_at) BETWEEN ? AND ?');
+      params.push(start_date, end_date);
+    }
+
+    // Filtro por usuário (opcional)
+    if (user_id) {
+      whereConditions.push('ts.user_id = ?');
+      params.push(user_id);
+    }
+
+    const whereClause = whereConditions.join(' AND ');
+
+    // Query para obter horas reais por dia (e por usuário se não filtrado)
+    let sessionsByDay = [];
+    try {
+      // Se há filtro de usuário, retorna agregado por dia
+      // Se não há filtro, retorna breakdown por dia e usuário
+      if (user_id) {
+        const result = await query(
+          `SELECT
+            DATE(ts.created_at) as data,
+            SUM(ts.duration_hours) as horas_reais
+           FROM time_entries_sessions ts
+           WHERE ${whereClause}
+           GROUP BY DATE(ts.created_at)
+           ORDER BY data ASC`,
+          params
+        );
+        sessionsByDay = Array.isArray(result) ? result : [];
+      } else {
+        // Retorna breakdown por dia e usuário
+        const result = await query(
+          `SELECT
+            DATE(ts.created_at) as data,
+            ts.user_id,
+            u.full_name as user_name,
+            SUM(ts.duration_hours) as horas_reais
+           FROM time_entries_sessions ts
+           LEFT JOIN users u ON ts.user_id = u.id
+           WHERE ${whereClause}
+           GROUP BY DATE(ts.created_at), ts.user_id, u.full_name
+           ORDER BY data ASC, u.full_name ASC`,
+          params
+        );
+        sessionsByDay = Array.isArray(result) ? result : [];
+      }
+    } catch (queryError) {
+      console.error('Erro ao executar query:', queryError);
+      throw queryError;
+    }
+
+    // Obter horas planejadas (sugestão do supervisor)
+    const suggestedHours = parseFloat(task.daily_hours) || 0;
+
+    // Formatar resposta
+    let chartData;
+
+    if (user_id) {
+      // Quando filtrado por usuário, retorna como antes
+      chartData = sessionsByDay.map((row) => ({
+        data: row.data,
+        horasReais: parseFloat(row.horas_reais) || 0,
+        horasSugeridas: suggestedHours,
+      }));
+    } else {
+      // Quando não filtrado, retorna com informação de usuário para breakdown
+      chartData = sessionsByDay.map((row) => ({
+        data: row.data,
+        horasReais: parseFloat(row.horas_reais) || 0,
+        horasSugeridas: suggestedHours,
+        user_id: row.user_id,
+        user_name: row.user_name || 'Desconhecido',
+      }));
+    }
+
+    res.json({
+      success: true,
+      data: chartData,
+      metadata: {
+        taskId,
+        taskTitle: task.title,
+        suggestedHours,
+        period,
+        userId: user_id ? parseInt(user_id) : null,
+        totalSessions: sessionsByDay.length,
       },
     });
   } catch (error) {

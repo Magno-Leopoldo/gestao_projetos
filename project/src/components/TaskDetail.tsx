@@ -9,6 +9,7 @@ import TimeTrackingControls from './TimeTrackingControls';
 import AssignUsersModal from './AssignUsersModal';
 import SessionDetailsModal from './SessionDetailsModal';
 import DailyHoursDetailsModal from './DailyHoursDetailsModal';
+import ProgressChartModal from './ProgressChartModal';
 
 const TaskDetail: React.FC = () => {
   const navigate = useNavigate();
@@ -33,6 +34,7 @@ const TaskDetail: React.FC = () => {
   const [editDailyHours, setEditDailyHours] = useState(0);
   const [editError, setEditError] = useState<string | null>(null);
   const [isDailyHoursDetailsOpen, setIsDailyHoursDetailsOpen] = useState(false);
+  const [isProgressChartOpen, setIsProgressChartOpen] = useState(false);
 
   // NOVO: Estados para filtros de histórico
   const [historyPeriod, setHistoryPeriod] = useState<'today' | 'week' | 'month' | 'custom' | 'all'>('all');
@@ -96,8 +98,10 @@ const TaskDetail: React.FC = () => {
       const activeSessionsResult = await timeEntriesService.getTaskSessions(tId);
       const allSessionsIncludingActive = activeSessionsResult?.data || [];
 
-      // Find active session (running or paused) - vai estar na lista completa
-      const active = allSessionsIncludingActive.find((s) => s.status === 'running' || s.status === 'paused');
+      // Find active session (running or paused) - APENAS DO USUÁRIO LOGADO (CRÍTICO!)
+      const active = allSessionsIncludingActive.find(
+        (s) => (s.status === 'running' || s.status === 'paused') && s.user_id === userId
+      );
       setActiveSession(active || null);
 
       // Load day status
@@ -372,8 +376,16 @@ const TaskDetail: React.FC = () => {
               </div>
 
               {/* Progress */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <p className="text-sm font-medium text-gray-600 mb-2">Progresso</p>
+              <div
+                onClick={() => setIsProgressChartOpen(true)}
+                className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 cursor-pointer hover:shadow-md hover:border-green-300 transition-all group"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium text-gray-600">Progresso</p>
+                  <p className="text-xs text-green-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                    📊 Ver gráfico
+                  </p>
+                </div>
                 <p className="text-4xl font-bold text-green-600 mb-2">
                   {getProgressPercentage()}%
                 </p>
@@ -759,6 +771,18 @@ const TaskDetail: React.FC = () => {
           assignees={assignees}
           onClose={() => setIsDailyHoursDetailsOpen(false)}
         />
+
+        {/* Progress Chart Modal */}
+        {task && (
+          <ProgressChartModal
+            isOpen={isProgressChartOpen}
+            taskId={task.id}
+            taskTitle={task.title}
+            suggestedHours={task.daily_hours || 0}
+            assignees={assignees}
+            onClose={() => setIsProgressChartOpen(false)}
+          />
+        )}
       </div>
     </div>
   );

@@ -17,6 +17,11 @@ const ProjectsList: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<ProjectFilters>({});
 
+  // ✅ Gerar ID visual composto
+  const getDisplayId = (projectId: number): string => {
+    return `P${projectId}`;
+  };
+
   useEffect(() => {
     loadProjects();
   }, [filters]);
@@ -179,7 +184,7 @@ const ProjectsList: React.FC = () => {
                   {/* Meta Information */}
                   <div className="pt-4 border-t border-gray-200">
                     <div className="text-xs text-gray-500">
-                      <p>ID: {project.id}</p>
+                      <p className="font-semibold text-blue-600">ID: {getDisplayId(project.id)}</p>
                       <p>
                         Criado em: {new Date(project.created_at).toLocaleDateString('pt-BR')}
                       </p>

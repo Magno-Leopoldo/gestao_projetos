@@ -19,6 +19,7 @@ import {
   getTaskTimeEntries,
   getTodayTimeEntries,
   getUserTodayTimeEntries,
+  getTaskProgressChart,
 } from '../controllers/timeEntriesController.js';
 import { authenticate, isSupervisorOrAdmin } from '../middleware/auth.js';
 
@@ -59,6 +60,9 @@ router.post('/:taskId/time-entries/start', startTimeEntry);
 
 // GET /api/tasks/:taskId/time-entries - Listar sessões
 router.get('/:taskId/time-entries', getTaskTimeEntries);
+
+// GET /api/tasks/:taskId/progress-chart - Dados para gráfico de progresso
+router.get('/:taskId/progress-chart', getTaskProgressChart);
 
 // GET /api/tasks/:taskId/time-entries/today - Sessões do dia
 router.get('/:taskId/time-entries/today', getTodayTimeEntries);

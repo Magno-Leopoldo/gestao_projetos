@@ -2,7 +2,7 @@
 
 **Documento Técnico:** Mapeamento completo das regras de negócio implementadas
 **Data:** Janeiro 2026
-**Versão:** 2.2 (Progresso Acumulativo + Filtros + Validações)
+**Versão:** 2.3 (Progresso Acumulativo + Filtros + Modais Visuais Melhorados)
 
 ---
 
@@ -16,9 +16,10 @@
 6. [REGRA 5: Time Tracking (Play/Pause/Stop)](#regra-5-time-tracking-playpausestop)
 7. [REGRA 6: Conclusão Estimada Dinâmica](#regra-6-conclusão-estimada-dinâmica)
 8. [REGRA 7: Filtros de Histórico](#regra-7-filtros-de-histórico)
-9. [FLUXOS COMPLETOS](#fluxos-completos)
-10. [VALIDAÇÕES](#validações)
-11. [ESTRUTURA DE DADOS](#estrutura-de-dados)
+9. [REGRA 8: Interface e Modais](#regra-8-interface-e-modais)
+10. [FLUXOS COMPLETOS](#fluxos-completos)
+11. [VALIDAÇÕES](#validações)
+12. [ESTRUTURA DE DADOS](#estrutura-de-dados)
 
 ---
 
@@ -857,6 +858,214 @@ Exemplo:
 
 ---
 
+## 🎨 REGRA 8: INTERFACE E MODAIS
+
+### **Modal de Horas Dedicadas (DailyHoursDetailsModal)**
+
+Abre ao clicar no card "Horas Dedicadas" na página de detalhes da tarefa.
+
+#### **Design:**
+- **Header Gradient:** Blue (600→700) com background
+- **Backdrop:** Blur semi-transparente
+- **Ícones:** Clock, TrendingUp, Users
+- **Barra de Progresso:** Dinâmica com cores
+  - Verde (0-75%): Sob-alocado
+  - Amarelo (75-90%): Próximo ao limite
+  - Laranja (90-100%): Quase cheio
+  - Vermelho (>100%): Over-alocado
+
+#### **Seções do Modal:**
+
+```
+┌─ HEADER ────────────────────────────┐
+│ 🔵 Horas Dedicadas                  │
+│ "Nome da Tarefa"                    │
+│ [X]                                 │
+└─────────────────────────────────────┘
+
+┌─ COMPARAÇÃO VISUAL ─────────────────┐
+│ ⏱️ Sugestão: 8.00h (âmbar)          │
+│ 📈 Alocado: 7.00h (azul)            │
+│                                     │
+│ [████████░] 87% do sugerido         │
+└─────────────────────────────────────┘
+
+┌─ STATUS BADGE ──────────────────────┐
+│ ✓ 1.00h abaixo da sugestão          │
+│ (Green badge)                       │
+└─────────────────────────────────────┘
+
+┌─ USUÁRIOS (GRID 2 COLS) ────────────┐
+│ ┌─────────────────┐ ┌─────────────┐ │
+│ │ João Silva      │ │ Maria Costa │ │
+│ │ 4.00h           │ │ 3.00h       │ │
+│ └─────────────────┘ └─────────────┘ │
+└─────────────────────────────────────┘
+
+┌─ RESUMO ────────────────────────────┐
+│ Total Sugerido: 8.00h               │
+│ Total Alocado:  7.00h               │
+└─────────────────────────────────────┘
+
+┌─ FOOTER ────────────────────────────┐
+│ [Fechar]                            │
+└─────────────────────────────────────┘
+```
+
+#### **Componentes Visuais:**
+
+```typescript
+// DailyHoursDetailsModal.tsx (linhas 45-178)
+
+// Header gradient azul
+bg-gradient-to-r from-blue-600 to-blue-700
+
+// Progress bar dinâmico
+percentualUsed > 100 ? 'bg-red-500'
+: percentualUsed > 90 ? 'bg-orange-500'
+: percentualUsed > 75 ? 'bg-yellow-500'
+: 'bg-green-500'
+
+// Status badge com cores
+isAbove ? 'bg-green-50 border-green-200'
+: isBelow ? 'bg-orange-50 border-orange-200'
+: 'bg-blue-50 border-blue-200'
+
+// Grid responsivo
+grid grid-cols-1 sm:grid-cols-2
+
+// Sticky header/footer
+sticky top-0 / sticky bottom-0
+```
+
+---
+
+### **Modal de Detalhes de Sessão (SessionDetailsModal)**
+
+Abre ao clicar em uma linha da tabela de histórico de sessões.
+
+#### **Design:**
+- **Header Gradient:** Emerald (600→Teal 600) com status
+- **Tempo Total:** Card azul/cyan grande (5xl-6xl)
+- **Métricas:** Grid com cards coloridos
+- **Horários:** Cards brancos com dados
+- **Notas:** Card azul/indigo se houver
+
+#### **Seções do Modal:**
+
+```
+┌─ HEADER ────────────────────────────────┐
+│ 🟢 Detalhes da Sessão                   │
+│ ✓ Finalizada / ▶️ Em andamento / ⏸️ Pausada
+│ [X]                                     │
+└─────────────────────────────────────────┘
+
+┌─ TEMPO TOTAL (DESTAQUE) ────────────────┐
+│ ⏱️ TEMPO TOTAL                          │
+│                                         │
+│ 3h 45m 30s                              │
+│ Duração total da sessão                 │
+└─────────────────────────────────────────┘
+
+┌─ GRID DE MÉTRICAS (2 COLS) ─────────────┐
+│ ┌──────────────┐ ┌──────────────┐      │
+│ │ 💼           │ │ ⏸️           │      │
+│ │ TEMPO        │ │ TEMPO        │      │
+│ │ DEDICADO     │ │ EM PAUSA     │      │
+│ │ 3h 15m       │ │ 30m          │      │
+│ │ 3.25h        │ │ 0.50h        │      │
+│ └──────────────┘ └──────────────┘      │
+└─────────────────────────────────────────┘
+
+┌─ PAUSAS ────────────────────────────────┐
+│ 🔄 PAUSAS                               │
+│ 2 vezes                                 │
+└─────────────────────────────────────────┘
+
+┌─ HORÁRIOS ──────────────────────────────┐
+│ ⏱️ HORÁRIOS                              │
+│                                         │
+│ ┌─ Início ─────────────────────────┐   │
+│ │ 07/01/2026 09:00:00              │   │
+│ └──────────────────────────────────┘   │
+│                                         │
+│ ┌─ Fim ────────────────────────────┐   │
+│ │ 07/01/2026 13:00:00              │   │
+│ └──────────────────────────────────┘   │
+│                                         │
+│ (ou se ainda ativa:)                    │
+│ ▶️ Em andamento / ⏸️ Pausada             │
+└─────────────────────────────────────────┘
+
+┌─ NOTAS (OPCIONAL) ──────────────────────┐
+│ 📝 NOTAS                                │
+│ "Implementação concluída com sucesso"   │
+└─────────────────────────────────────────┘
+
+┌─ FOOTER ────────────────────────────────┐
+│ [Fechar]                                │
+└─────────────────────────────────────────┘
+```
+
+#### **Componentes Visuais:**
+
+```typescript
+// SessionDetailsModal.tsx (linhas 36-163)
+
+// Header gradient emerald
+bg-gradient-to-r from-emerald-600 to-teal-600
+
+// Backdrop blur
+backdrop-blur-sm
+
+// Tempo total destaque
+bg-gradient-to-br from-blue-600 to-cyan-600
+text-5xl md:text-6xl font-bold
+
+// Cards de métricas com gradientes
+from-green-50 to-emerald-50  // Tempo dedicado
+from-amber-50 to-yellow-50   // Tempo pausa
+from-orange-50 to-red-50     // Pausas
+
+// Ícones em containers
+p-2 bg-[cor]-100 rounded-lg
+
+// Borders destacadas
+border-2 border-[cor]-200
+
+// Hover effects
+hover:shadow-md transition-shadow
+
+// Rounded corners modernos
+rounded-xl
+
+// Status em header
+text-emerald-100 text-sm mt-1
+```
+
+#### **Lógica de Dados:**
+
+```typescript
+// Cálculos precisos em segundos
+const formatSeconds = (secs: number) => {
+  const hours = Math.floor(secs / 3600);
+  const minutes = Math.floor((secs % 3600) / 60);
+  const seconds = secs % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+  }
+  return `${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+};
+
+// Valores precisos do banco
+const durationSeconds = session.duration_total_seconds || 0;
+const pausedSeconds = session.paused_total_seconds || 0;
+const totalSeconds = durationSeconds + pausedSeconds;
+```
+
+---
+
 ## 🔄 FLUXOS COMPLETOS
 
 ### **FLUXO 1: Criar Tarefa → Atribuir → Trabalhar**
@@ -1063,7 +1272,7 @@ projects (1)
 
 ## 🎯 RESUMO EXECUTIVO
 
-### **As 7 Regras em Uma Frase**
+### **As 8 Regras em Uma Frase**
 
 1. **Atribuição** → Supervisores definem quem trabalha quanto/dia em cada tarefa
 2. **Limite 8h** → Um usuário não pode se comprometer com >8h/dia TOTAL
@@ -1072,6 +1281,7 @@ projects (1)
 5. **Time Tracking** → Play/Pause/Stop registra trabalho real em segundos
 6. **Conclusão** → Estimada = hoje + (estimadas ÷ horas dedicadas/dia)
 7. **Filtros** → Visualizar histórico por período e/ou usuário
+8. **Interface** → Modais atraentes e responsivos com gradients e visualizações dinâmicas
 
 ### **Fluxo Simplificado**
 
@@ -1092,5 +1302,6 @@ Supervisor cria → Atribui usuários → Usuários trabalham (play/pause/stop)
 
 ---
 
-**Documento Técnico v2.2 - Janeiro 2026**
-**Próximas: Regras de Dashboard, Monitoramento e Admin**
+**Documento Técnico v2.3 - Janeiro 2026**
+**Novidades v2.3:** Adicionada REGRA 8 (Interface e Modais) com documentação completa dos modais melhorados
+**Próximas:** Regras de Dashboard, Monitoramento e Admin

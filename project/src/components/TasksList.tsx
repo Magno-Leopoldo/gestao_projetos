@@ -13,7 +13,7 @@ type SortBy = 'order' | 'status' | 'priority' | 'estimated_hours';
 const TasksList: React.FC = () => {
   const navigate = useNavigate();
   const { projectId, stageId } = useParams<{ projectId: string; stageId: string }>();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projectName, setProjectName] = useState<string>('');
   const [stageName, setStageName] = useState<string>('');
@@ -42,7 +42,25 @@ const TasksList: React.FC = () => {
 
       // Load tasks
       const tasksResult = await tasksService.getByStage(sId);
-      setTasks(tasksResult || []);
+      let filteredTasks = tasksResult || [];
+
+      // ✅ FILTRO: Se é user, mostrar apenas tarefas onde está atribuído
+      if (profile?.role === 'user' && user?.id) {
+        filteredTasks = filteredTasks.filter((task: any) => {
+          // assignee_ids é uma string "7,8" ou null
+          if (!task.assignee_ids) return false;
+
+          const assigneeIds = task.assignee_ids
+            .toString()
+            .split(',')
+            .map((id: string) => parseInt(id.trim()));
+
+          return assigneeIds.includes(user.id);
+        });
+      }
+      // Se é supervisor ou admin: mostra todas as tarefas
+
+      setTasks(filteredTasks);
     } catch (err: any) {
       const errorMsg = err.response?.data?.message || err.message || 'Erro ao carregar dados';
       setError(errorMsg);
@@ -65,17 +83,17 @@ const TasksList: React.FC = () => {
   };
 
   const handleCreateTaskSuccess = () => {
-    // Recarregar dados após criar tarefa
-    console.log('📋 handleCreateTaskSuccess chamado - recarregando tarefas');
     if (projectId && stageId) {
-      console.log(`🔄 Carregando tarefas para stage: ${stageId}`);
       loadData(parseInt(projectId), parseInt(stageId));
-    } else {
-      console.warn('⚠️ projectId ou stageId ausente!', { projectId, stageId });
     }
   };
 
   const canCreateTask = profile?.role === 'supervisor' || profile?.role === 'admin';
+
+  // ✅ Gerar ID visual composto para tarefas
+  const getDisplayId = (pId: string | number, sId: string | number, taskId: number): string => {
+    return `P${pId}.E${sId}.T${taskId}`;
+  };
 
   const getSortedTasks = () => {
     const sorted = [...tasks];
@@ -216,7 +234,12 @@ const TasksList: React.FC = () => {
                       <div className="flex items-start gap-3 mb-2">
                         <span className="text-2xl font-bold text-gray-400">{task.order}</span>
                         <div className="flex-1">
-                          <h3 className="text-lg font-semibold text-gray-900">{task.title}</h3>
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="text-lg font-semibold text-gray-900">{task.title}</h3>
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-semibold">
+                              {getDisplayId(projectId, stageId, task.id)}
+                            </span>
+                          </div>
                           {task.description && (
                             <p className="text-sm text-gray-600 line-clamp-1">
                               {task.description}
@@ -296,8 +319,7 @@ const TasksList: React.FC = () => {
                   )}
 
                   {/* Footer */}
-                  <div className="mt-4 flex items-center justify-between">
-                    <span className="text-xs text-gray-500">ID: {task.id}</span>
+                  <div className="mt-4 flex items-center justify-end">
                     <span className="text-blue-600 font-medium text-sm hover:text-blue-800">
                       Ver Detalhes →
                     </span>

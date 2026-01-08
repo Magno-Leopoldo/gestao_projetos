@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { projectsService } from '../services/projectsService';
+import { stagesService } from '../services/stagesService';
+import { tasksService } from '../services/tasksService';
 import { useAuth } from '../contexts/AuthContext';
 import { Project, ProjectStage } from '../types';
 import CreateStageModal from './CreateStageModal';
@@ -35,7 +37,49 @@ const StagesView: React.FC = () => {
       setProject(projectData);
 
       if (projectData.stages) {
-        setStages(projectData.stages);
+        let stagesWithTasks = projectData.stages;
+
+        // ✅ Se é user, carregar tarefas de cada etapa para poder filtrar corretamente
+        if (profile?.role === 'user' && user?.id) {
+          stagesWithTasks = await Promise.all(
+            projectData.stages.map(async (stage: any) => {
+              try {
+                // Carregar tarefas dessa etapa (que incluem assignees)
+                const tasksResult = await tasksService.getByStage(stage.id);
+                const tasks = Array.isArray(tasksResult) ? tasksResult : [];
+
+                return {
+                  ...stage,
+                  tasks: tasks
+                };
+              } catch (err) {
+                console.warn(`Erro ao carregar tarefas da etapa ${stage.id}:`, err);
+                return {
+                  ...stage,
+                  tasks: []
+                };
+              }
+            })
+          );
+
+          // Filtrar apenas etapas que têm tarefas onde o usuário está atribuído
+          stagesWithTasks = stagesWithTasks.filter((stage: any) => {
+            const tasks = Array.isArray(stage.tasks) ? stage.tasks : [];
+            return tasks.some((task: any) => {
+              // ✅ CORRIGIDO: assignee_ids é uma string "7,8" ou null
+              if (!task.assignee_ids) return false;
+
+              const assigneeIds = task.assignee_ids
+                .toString()
+                .split(',')
+                .map((id: string) => parseInt(id.trim()));
+
+              return assigneeIds.includes(user.id);
+            });
+          });
+        }
+
+        setStages(stagesWithTasks);
       }
     } catch (err: any) {
       const errorMsg = err.response?.data?.message || err.message || 'Erro ao carregar dados';
@@ -60,6 +104,11 @@ const StagesView: React.FC = () => {
   };
 
   const canCreateStage = profile?.role === 'supervisor' || profile?.role === 'admin';
+
+  // ✅ Gerar ID visual composto para etapas
+  const getDisplayId = (pId: number | string, stageId: number): string => {
+    return `P${pId}.E${stageId}`;
+  };
 
   if (loading) {
     return (
@@ -136,7 +185,7 @@ const StagesView: React.FC = () => {
                   )}
 
                   <div className="space-y-1 text-sm text-gray-500 mb-4">
-                    <p>ID: {stage.id}</p>
+                    <p className="font-semibold text-blue-600">ID: {getDisplayId(projectId, stage.id)}</p>
                     {stage.estimated_hours && (
                       <p>Horas estimadas: {stage.estimated_hours}h</p>
                     )}

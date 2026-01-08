@@ -528,6 +528,58 @@ class TimeEntriesService {
   hasReachedLimit(completedHours: number): boolean {
     return completedHours >= 8;
   }
+
+  /**
+   * Obter dados de progresso por dia para gráfico
+   */
+  async getTaskProgressChart(
+    taskId: number,
+    filters?: {
+      user_id?: number;
+      period?: 'today' | 'week' | 'month' | 'custom' | 'all';
+      start_date?: string;
+      end_date?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    data: Array<{
+      data: string;
+      horasReais: number;
+      horasSugeridas: number;
+    }>;
+    metadata: {
+      taskId: number;
+      taskTitle: string;
+      suggestedHours: number;
+      period: string;
+      userId: number | null;
+      totalSessions: number;
+    };
+  }> {
+    const params = new URLSearchParams();
+
+    if (filters?.user_id) {
+      params.append('user_id', filters.user_id.toString());
+    }
+
+    if (filters?.period) {
+      params.append('period', filters.period);
+    }
+
+    if (filters?.start_date) {
+      params.append('start_date', filters.start_date);
+    }
+
+    if (filters?.end_date) {
+      params.append('end_date', filters.end_date);
+    }
+
+    const query = params.toString();
+    const url = `/tasks/${taskId}/progress-chart${query ? `?${query}` : ''}`;
+
+    const response = await apiClient.get(url);
+    return response.data;
+  }
 }
 
 export const timeEntriesService = new TimeEntriesService();
