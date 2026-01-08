@@ -4,6 +4,10 @@ import {
   validateUserDailyHours,
   validateStatusTransition,
   getTaskHoursBreakdown,
+  validateTaskDependencies,
+  validateAssignmentWithDependencies,
+  validateTaskTypeWithDependencies,
+  validateNoDependencyCycle,
 } from '../helpers/taskValidations.js';
 
 // GET /api/tasks - Listar todas as tarefas (com filtros opcionais)
@@ -234,6 +238,8 @@ export const createTask = async (req, res, next) => {
       priority,
       due_date,
       assigned_user_ids,
+      task_type,
+      dependency_ids,
     } = req.body;
     const { role, id: userId } = req.user;
 
@@ -268,6 +274,56 @@ export const createTask = async (req, res, next) => {
         error: 'INVALID_HOURS',
         message: 'Horas diárias não pode ser maior que horas estimadas',
       });
+    }
+
+    // Validar task_type e dependências
+    const typeValidation = await validateTaskTypeWithDependencies(
+      task_type || 'paralela',
+      dependency_ids || []
+    );
+
+    if (!typeValidation.is_valid) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_TASK_TYPE',
+        message: typeValidation.error,
+      });
+    }
+
+    // Validar que tarefas não-paralelas não podem ser atribuídas na criação
+    if (task_type === 'não_paralela' && assigned_user_ids && assigned_user_ids.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'CANNOT_ASSIGN_BLOCKING_TASK',
+        message: 'Tarefas do tipo "não_paralela" não podem ter usuários atribuídos na criação. Aguarde até que as dependências sejam concluídas.',
+      });
+    }
+
+    // Validar ciclos de dependência
+    if (dependency_ids && dependency_ids.length > 0) {
+      for (const depId of dependency_ids) {
+        // Verificar se a tarefa dependência existe na mesma etapa
+        const [depTask] = await query(
+          `SELECT id, stage_id FROM tasks WHERE id = ?`,
+          [depId]
+        );
+
+        if (!depTask) {
+          return res.status(404).json({
+            success: false,
+            error: 'DEPENDENCY_NOT_FOUND',
+            message: `Tarefa dependência ${depId} não encontrada`,
+          });
+        }
+
+        if (depTask.stage_id !== stageId) {
+          return res.status(400).json({
+            success: false,
+            error: 'INVALID_DEPENDENCY',
+            message: `Apenas tarefas da mesma etapa podem ser dependências`,
+          });
+        }
+      }
     }
 
     // Verificar se etapa existe e permissão
@@ -346,12 +402,12 @@ export const createTask = async (req, res, next) => {
 
     const nextOrder = (maxOrder?.max_order || 0) + 1;
 
-    // Usar transação para criar tarefa e atribuições
+    // Usar transação para criar tarefa, dependências e atribuições
     const result = await transaction(async (conn) => {
       // Inserir tarefa
       const [taskResult] = await conn.execute(
-        `INSERT INTO tasks (stage_id, title, description, status, estimated_hours, daily_hours, priority, \`order\`, due_date)
-         VALUES (?, ?, ?, 'novo', ?, ?, ?, ?, ?)`,
+        `INSERT INTO tasks (stage_id, title, description, status, estimated_hours, daily_hours, priority, \`order\`, due_date, task_type)
+         VALUES (?, ?, ?, 'novo', ?, ?, ?, ?, ?, ?)`,
         [
           stageId,
           title,
@@ -361,13 +417,24 @@ export const createTask = async (req, res, next) => {
           priority || 'medium',
           nextOrder,
           due_date || null,
+          task_type || 'paralela',
         ]
       );
 
       const taskId = taskResult.insertId;
 
-      // Atribuir usuários
-      if (assigned_user_ids && assigned_user_ids.length > 0) {
+      // Inserir dependências
+      if (dependency_ids && dependency_ids.length > 0) {
+        for (const depId of dependency_ids) {
+          await conn.execute(
+            'INSERT INTO task_dependencies (task_id, depends_on_task_id) VALUES (?, ?)',
+            [taskId, depId]
+          );
+        }
+      }
+
+      // Atribuir usuários (apenas para tarefas não "não_paralelas")
+      if (assigned_user_ids && assigned_user_ids.length > 0 && task_type !== 'não_paralela') {
         for (const assignedUserId of assigned_user_ids) {
           await conn.execute(
             'INSERT INTO task_assignments (task_id, user_id) VALUES (?, ?)',
@@ -642,6 +709,18 @@ export const assignUsersToTask = async (req, res, next) => {
         success: false,
         error: 'NOT_FOUND',
         message: 'Tarefa não encontrada',
+      });
+    }
+
+    // ✅ VALIDAÇÃO: Verificar se tarefa está bloqueada por dependências
+    const depValidation = await validateAssignmentWithDependencies(taskId);
+
+    if (!depValidation.can_assign) {
+      return res.status(400).json({
+        success: false,
+        error: 'TASK_BLOCKED_BY_DEPENDENCIES',
+        message: depValidation.reason,
+        blocking_dependencies: depValidation.validation.blocking_dependencies,
       });
     }
 

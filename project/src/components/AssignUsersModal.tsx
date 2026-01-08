@@ -33,10 +33,13 @@ const AssignUsersModal: React.FC<AssignUsersModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [blockingDependencies, setBlockingDependencies] = useState<any[]>([]);
 
   useEffect(() => {
     if (isOpen) {
       loadUsers();
+      validateDependencies();
       // Inicializar com usuários atualmente atribuídos e suas horas
       setSelectedUserIds(currentAssignees.map(u => u.id));
       // Inicializar horas de cada usuário com a sugestão do supervisor
@@ -49,6 +52,36 @@ const AssignUsersModal: React.FC<AssignUsersModalProps> = ({
       setUserDailyHours(initialHours);
     }
   }, [isOpen, currentAssignees, taskDailyHours]);
+
+  const validateDependencies = async () => {
+    try {
+      const taskData = await tasksService.getById(taskId);
+
+      // Verificar se tarefa é "não_paralela" e tem dependências não concluídas
+      if (taskData.task_type === 'não_paralela') {
+        // Buscar dependências bloqueantes
+        const dependencies = taskData.blocking_dependencies || [];
+        const incompleteDependencies = dependencies.filter(
+          (dep: any) => dep.status !== 'concluido'
+        );
+
+        if (incompleteDependencies.length > 0) {
+          setIsBlocked(true);
+          setBlockingDependencies(incompleteDependencies);
+        } else {
+          setIsBlocked(false);
+          setBlockingDependencies([]);
+        }
+      } else {
+        setIsBlocked(false);
+        setBlockingDependencies([]);
+      }
+    } catch (err) {
+      console.error('Erro ao validar dependências:', err);
+      setIsBlocked(false);
+      setBlockingDependencies([]);
+    }
+  };
 
   const loadUsers = async () => {
     try {
@@ -147,6 +180,23 @@ const AssignUsersModal: React.FC<AssignUsersModalProps> = ({
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-red-700 text-sm">❌ {error}</p>
+            </div>
+          )}
+
+          {/* Aviso de Tarefa Bloqueada */}
+          {isBlocked && (
+            <div className="p-4 bg-amber-50 border-l-4 border-amber-500 rounded-lg">
+              <p className="text-amber-900 font-semibold text-sm mb-2">⚠️ Tarefa Bloqueada por Dependências</p>
+              <p className="text-amber-800 text-xs mb-3">
+                Esta tarefa não pode ter usuários atribuídos até que as seguintes tarefas sejam concluídas:
+              </p>
+              <ul className="space-y-1 text-xs text-amber-800">
+                {blockingDependencies.map((dep: any) => (
+                  <li key={dep.id} className="ml-4">
+                    • <span className="font-medium">{dep.title}</span> - Status: {dep.status}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
@@ -261,10 +311,15 @@ const AssignUsersModal: React.FC<AssignUsersModalProps> = ({
           </button>
           <button
             onClick={handleSave}
-            disabled={loading}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={loading || isBlocked}
+            title={isBlocked ? 'Não é possível atribuir usuários a uma tarefa bloqueada por dependências' : ''}
+            className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+              isBlocked
+                ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed'
+            }`}
           >
-            {loading ? 'Salvando...' : 'Salvar Atribuições'}
+            {loading ? 'Salvando...' : isBlocked ? '🔒 Bloqueado' : 'Salvar Atribuições'}
           </button>
         </div>
       </div>

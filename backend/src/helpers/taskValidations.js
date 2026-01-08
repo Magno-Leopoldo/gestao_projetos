@@ -250,3 +250,156 @@ export async function getUserDayStatusSummary(userId) {
 
   return summary;
 }
+
+// =====================================================
+// VALIDAÇÕES DE DEPENDÊNCIAS (NOVA FASE)
+// =====================================================
+
+// Validar se tarefa tem dependências bloqueantes não concluídas
+export async function validateTaskDependencies(taskId) {
+  // Buscar todas as dependências da tarefa
+  const [taskInfo] = await query(
+    `SELECT task_type FROM tasks WHERE id = ?`,
+    [taskId]
+  );
+
+  if (!taskInfo) {
+    return {
+      is_blocked: false,
+      blocking_dependencies: [],
+      task_type: null,
+    };
+  }
+
+  // Se tarefa é "fixa" ou "paralela", não há bloqueio (dependências não afetam execução)
+  if (taskInfo.task_type !== 'não_paralela') {
+    return {
+      is_blocked: false,
+      blocking_dependencies: [],
+      task_type: taskInfo.task_type,
+    };
+  }
+
+  // Se tarefa é "não_paralela", verificar dependências
+  const blockedDependencies = await query(
+    `SELECT
+      td.id as dependency_id,
+      td.depends_on_task_id,
+      t.title,
+      t.status,
+      t.status = 'concluido' as is_satisfied
+    FROM task_dependencies td
+    INNER JOIN tasks t ON td.depends_on_task_id = t.id
+    WHERE td.task_id = ?
+      AND t.status != 'concluido'`,
+    [taskId]
+  );
+
+  return {
+    is_blocked: blockedDependencies.length > 0,
+    blocking_dependencies: blockedDependencies.map(dep => ({
+      dependency_id: dep.dependency_id,
+      task_id: dep.depends_on_task_id,
+      title: dep.title,
+      status: dep.status,
+      is_satisfied: !!dep.is_satisfied,
+    })),
+    task_type: taskInfo.task_type,
+    blocked_count: blockedDependencies.length,
+  };
+}
+
+// Validar se é possível atribuir usuários (deve validar dependências bloqueantes)
+export async function validateAssignmentWithDependencies(taskId) {
+  const validation = await validateTaskDependencies(taskId);
+
+  return {
+    can_assign: !validation.is_blocked,
+    reason: validation.is_blocked
+      ? `Esta tarefa depende de ${validation.blocked_count} tarefa(s) que não foram concluídas: ${
+        validation.blocking_dependencies
+          .map(d => `"${d.title}"`)
+          .join(', ')
+      }. Não é possível atribuir usuários até que sejam concluídas.`
+      : null,
+    validation,
+  };
+}
+
+// Validar se tarefa_type é válido e se tem as dependências obrigatórias
+export async function validateTaskTypeWithDependencies(taskType, dependencies = []) {
+  const validTypes = ['paralela', 'não_paralela', 'fixa'];
+
+  if (!validTypes.includes(taskType)) {
+    return {
+      is_valid: false,
+      error: `Tipo de tarefa inválido. Deve ser um de: ${validTypes.join(', ')}`,
+    };
+  }
+
+  // Se tarefa é "não_paralela", exigir pelo menos uma dependência
+  if (taskType === 'não_paralela' && (!dependencies || dependencies.length === 0)) {
+    return {
+      is_valid: false,
+      error: 'Tarefas do tipo "não_paralela" obrigatoriamente devem ter dependências.',
+    };
+  }
+
+  return {
+    is_valid: true,
+    task_type: taskType,
+    dependencies_count: dependencies.length,
+  };
+}
+
+// Validar se criar essa dependência causaria ciclo
+export async function validateNoDependencyCycle(taskId, dependsOnTaskId) {
+  // Verificar se já existe essa dependência exata
+  const [existingDep] = await query(
+    `SELECT id FROM task_dependencies WHERE task_id = ? AND depends_on_task_id = ?`,
+    [taskId, dependsOnTaskId]
+  );
+
+  if (existingDep) {
+    return {
+      has_cycle: false,
+      would_duplicate: true,
+      error: 'Esta dependência já existe.',
+    };
+  }
+
+  // Verificar se dependsOnTaskId depende de taskId (causaria ciclo)
+  // Usar recursão para detectar
+  const chainDependencies = await query(
+    `WITH RECURSIVE dep_chain AS (
+      -- Base case: dependências diretas de dependsOnTaskId
+      SELECT depends_on_task_id as next_id, 1 as depth
+      FROM task_dependencies
+      WHERE task_id = ?
+
+      UNION ALL
+
+      -- Caso recursivo: dependências de dependências
+      SELECT td.depends_on_task_id, dc.depth + 1
+      FROM task_dependencies td
+      INNER JOIN dep_chain dc ON td.task_id = dc.next_id
+      WHERE dc.depth < 100  -- Limite de profundidade para evitar loops infinitos
+    )
+    SELECT * FROM dep_chain WHERE next_id = ?`,
+    [dependsOnTaskId, taskId]
+  );
+
+  if (chainDependencies.length > 0) {
+    return {
+      has_cycle: true,
+      would_duplicate: false,
+      error: 'Adicionar esta dependência criaria um ciclo: a tarefa dependente já (indiretamente) depende desta tarefa.',
+    };
+  }
+
+  return {
+    has_cycle: false,
+    would_duplicate: false,
+    is_valid: true,
+  };
+}

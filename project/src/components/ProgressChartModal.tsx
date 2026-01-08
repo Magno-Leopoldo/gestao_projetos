@@ -64,11 +64,27 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
 
       const result = await timeEntriesService.getTaskProgressChart(taskId, filters);
 
+      console.log('📊 Resposta completa do backend:', result);
+      console.log('📊 Filtros usados:', filters);
+
       if (result.success && result.data) {
+        console.log('📊 Dados brutos do backend:', result.data);
+        console.log('📊 Número de itens:', result.data.length);
+        if (result.data.length > 0) {
+          console.log('📊 Primeiro item:', result.data[0]);
+          console.log('📊 Tem user_id?:', !!result.data[0]?.user_id);
+          console.log('📊 Tem user_name?:', !!result.data[0]?.user_name);
+          // Contar quantos user_ids únicos há
+          const uniqueUserIds = new Set(result.data.map((d: any) => d.user_id).filter(Boolean));
+          console.log('📊 User IDs únicos:', Array.from(uniqueUserIds));
+        }
         setChartData(result.data);
+      } else {
+        console.warn('⚠️ Resultado não foi sucesso ou não contém data:', result);
+        setChartData([]);
       }
     } catch (err) {
-      console.error('Erro ao carregar dados do gráfico:', err);
+      console.error('❌ Erro ao carregar dados do gráfico:', err);
       setError('Erro ao carregar dados do gráfico');
     } finally {
       setLoading(false);
@@ -78,6 +94,7 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
   // Recarregar ao mudar filtros
   useEffect(() => {
     if (isOpen) {
+      console.log('🔃 Recarregando dados - Filtros:', { period, selectedUser, customStartDate, customEndDate });
       loadChartData();
     }
   }, [isOpen, period, selectedUser, customStartDate, customEndDate, taskId]);
@@ -85,13 +102,36 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
   if (!isOpen) return null;
 
   const formatDateForDisplay = (dateStr: string) => {
-    const date = new Date(dateStr + 'T00:00:00');
-    return date.toLocaleDateString('pt-BR', { weekday: 'short', month: 'short', day: 'numeric' });
+    if (!dateStr) return 'Data desconhecida';
+    try {
+      // Se já tem 'T', é ISO format. Se não, adicionar T00:00:00
+      const normalizedDate = dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00';
+      console.log('📅 formatDateForDisplay - Input:', dateStr, '| Normalized:', normalizedDate);
+      const date = new Date(normalizedDate);
+      if (isNaN(date.getTime())) {
+        console.warn('❌ Data inválida:', dateStr);
+        return 'Data inválida';
+      }
+      const formatted = date.toLocaleDateString('pt-BR', { weekday: 'short', month: 'short', day: 'numeric' });
+      console.log('✅ Data formatada:', formatted);
+      return formatted;
+    } catch (e) {
+      console.error('❌ Erro ao formatar data:', e);
+      return 'Data desconhecida';
+    }
   };
 
   const formatDateFull = (dateStr: string) => {
-    const date = new Date(dateStr + 'T00:00:00');
-    return date.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    if (!dateStr) return 'Data desconhecida';
+    try {
+      // Se já tem 'T', é ISO format. Se não, adicionar T00:00:00
+      const normalizedDate = dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00';
+      const date = new Date(normalizedDate);
+      if (isNaN(date.getTime())) return 'Data inválida';
+      return date.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    } catch (e) {
+      return 'Data desconhecida';
+    }
   };
 
   // Tooltip customizado em português
@@ -159,13 +199,19 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
 
   // Processar dados para agregação (quando em modo "Todos")
   const processedData = (() => {
+    console.log('🔄 processedData - chartData.length:', chartData.length);
+    console.log('🔄 processedData - chartData:', chartData);
     // Verificar se precisa agregar (múltiplos usuários por dia)
-    const needsAggregation = selectedUser === undefined && chartData.length > 0 && chartData[0]?.user_id;
+    const needsAggregation = selectedUser === undefined && chartData.length > 0 && !!chartData[0]?.user_id;
+    console.log('🔄 processedData - needsAggregation:', needsAggregation);
+    console.log('🔄 selectedUser:', selectedUser);
+    console.log('🔄 chartData[0]?.user_id:', chartData[0]?.user_id);
 
     let resultData: any[] = [];
 
     if (needsAggregation) {
       // Mode: Breakdown por usuário - agregar para gráfico, mas manter detalhes
+      console.log('🔀 Agregando dados por dia...');
       const aggregated = Object.values(
         chartData.reduce((acc: any, item: any) => {
           const date = item.data;
@@ -212,6 +258,7 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
       }));
     }
 
+    console.log('🔄 processedData - resultData final:', resultData);
     return resultData;
   })();
 
@@ -227,7 +274,7 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
   };
 
   // Calcular tamanho do dot baseado se tem agregação
-  const isAggregated = selectedUser === undefined && chartData.length > 0 && chartData[0]?.user_id;
+  const isAggregated = selectedUser === undefined && chartData.length > 0 && !!chartData[0]?.user_id;
   const dotRadius = isAggregated ? 8 : 6;
   const activeDotRadius = isAggregated ? 12 : 8;
 
@@ -235,6 +282,7 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
     ...d,
     dataDisplay: formatDateForDisplay(d.data),
   }));
+  console.log('📅 formattedData com dataDisplay:', formattedData);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
