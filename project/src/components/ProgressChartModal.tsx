@@ -101,19 +101,13 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
         const data = payload[0].payload;
 
         // Validações de segurança para garantir que os dados existem
-        if (!data) {
-          console.warn('⚠️ CustomTooltip: data é null/undefined');
-          return null;
-        }
+        if (!data) return null;
 
         const horasReais = parseFloat(data.horasReais) || 0;
         const horasSugeridas = parseFloat(data.horasSugeridas) || 0;
         const diferenca = horasReais - horasSugeridas;
         const percentual = horasSugeridas > 0 ? ((horasReais / horasSugeridas) * 100).toFixed(1) : '0.0';
         const temBreakdown = data.users && Array.isArray(data.users) && data.users.length > 0;
-
-        // Debug
-        console.log('✅ CustomTooltip renderizando:', { data, horasReais, horasSugeridas, temBreakdown });
 
         return (
           <div className="bg-white rounded-lg shadow-2xl p-4 border border-gray-200 max-w-xs z-50">
@@ -168,13 +162,6 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
     // Verificar se precisa agregar (múltiplos usuários por dia)
     const needsAggregation = selectedUser === undefined && chartData.length > 0 && chartData[0]?.user_id;
 
-    console.log('📊 Processamento de dados:', {
-      selectedUser,
-      needsAggregation,
-      chartDataLength: chartData.length,
-      firstItem: chartData[0],
-    });
-
     let resultData: any[] = [];
 
     if (needsAggregation) {
@@ -215,8 +202,6 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
         horasSugeridas: parseFloat(item.horasSugeridas) || 0,
         users: Array.isArray(item.users) ? item.users : [],
       }));
-
-      console.log('✅ Dados agregados:', resultData.slice(0, 3));
     } else {
       // Mode: Sem breakdown (filtrado por usuário ou dados já agregados)
       resultData = chartData.map((item: any) => ({
@@ -225,21 +210,10 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
         horasSugeridas: parseFloat(item.horasSugeridas) || 0,
         users: Array.isArray(item.users) ? item.users : [],
       }));
-
-      console.log('✅ Dados sem agregação:', resultData.slice(0, 3));
     }
 
     return resultData;
   })();
-
-  // Debug final
-  console.log('🎯 Final - ProgressChart', {
-    selectedUser,
-    chartDataLength: chartData.length,
-    processedDataLength: processedData.length,
-    processedDataFirst: processedData[0],
-    formattedDataLength: 0, // será definido abaixo
-  });
 
   // Calcular estatísticas (após processedData ser definido)
   const stats = {
@@ -261,15 +235,6 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
     ...d,
     dataDisplay: formatDateForDisplay(d.data),
   }));
-
-  console.log('📋 formattedData pronto:', {
-    length: formattedData.length,
-    first: formattedData[0],
-    isAggregated,
-    dotRadius,
-    activeDotRadius,
-    data: formattedData,
-  });
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
@@ -414,11 +379,6 @@ const ProgressChartModal: React.FC<ProgressChartModalProps> = ({
                   data={formattedData}
                   margin={{ top: 20, right: 120, left: 20, bottom: 20 }}
                   isAnimationActive={false}
-                  onMouseMove={(state: any) => {
-                    if (state?.isTooltipActive) {
-                      console.log('🖱️ Hover ativo:', state?.activeTooltipIndex);
-                    }
-                  }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis
