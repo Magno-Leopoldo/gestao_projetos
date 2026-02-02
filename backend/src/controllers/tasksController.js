@@ -141,8 +141,8 @@ export const getTasksByStage = async (req, res, next) => {
       WHERE t.stage_id = ?
       GROUP BY t.id
       ORDER BY t.order ASC
-      LIMIT ? OFFSET ?`,
-      [stageId, limitNum, offset]
+      LIMIT ${limitNum} OFFSET ${offset}`,
+      [stageId]
     );
 
     // Buscar total de tarefas (para paginação)
