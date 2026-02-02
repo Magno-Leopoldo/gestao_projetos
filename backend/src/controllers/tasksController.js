@@ -119,14 +119,20 @@ export const getAllTasks = async (req, res, next) => {
   }
 };
 
-// GET /api/stages/:stageId/tasks - Listar tarefas de uma etapa
+// GET /api/stages/:stageId/tasks - Listar tarefas de uma etapa com paginação e métricas
 export const getTasksByStage = async (req, res, next) => {
   try {
     const { stageId } = req.params;
+    const { include_metrics, page = 1, limit = 20 } = req.query;
 
+    // Calcular offset para paginação
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const offset = (pageNum - 1) * limitNum;
+
+    // Buscar tarefas básicas com paginação
     const tasks = await query(
-      `SELECT
-        t.*,
+      `SELECT t.*,
         GROUP_CONCAT(u.id) as assignee_ids,
         GROUP_CONCAT(u.full_name SEPARATOR ', ') as assignees
       FROM tasks t
@@ -134,13 +140,86 @@ export const getTasksByStage = async (req, res, next) => {
       LEFT JOIN users u ON ta.user_id = u.id
       WHERE t.stage_id = ?
       GROUP BY t.id
-      ORDER BY t.order ASC`,
+      ORDER BY t.order ASC
+      LIMIT ? OFFSET ?`,
+      [stageId, limitNum, offset]
+    );
+
+    // Buscar total de tarefas (para paginação)
+    const [countResult] = await query(
+      `SELECT COUNT(DISTINCT t.id) as total
+      FROM tasks t
+      WHERE t.stage_id = ?`,
       [stageId]
     );
+    const total = countResult.total;
+    const totalPages = Math.ceil(total / limitNum);
+
+    // Buscar assignees como array de objetos para cada tarefa
+    let formattedTasks = await Promise.all(
+      tasks.map(async (task) => {
+        const assignees = await query(
+          `SELECT u.id, u.full_name, u.email, u.role, ta.daily_hours
+           FROM users u
+           INNER JOIN task_assignments ta ON u.id = ta.user_id
+           WHERE ta.task_id = ?`,
+          [task.id]
+        );
+
+        return {
+          ...task,
+          assignees_array: assignees,
+          assignees: task.assignees, // Manter compatibilidade (string)
+        };
+      })
+    );
+
+    // Se solicitado, incluir métricas de tempo dedicado
+    if (include_metrics === 'true') {
+      formattedTasks = await Promise.all(
+        formattedTasks.map(async (task) => {
+          // Buscar métricas gerais da tarefa
+          const [metrics] = await query(
+            `SELECT
+              total_horas_reais,
+              total_colaboradores,
+              taxa_media_percent,
+              status_risco
+            FROM v_task_metrics
+            WHERE task_id = ?`,
+            [task.id]
+          );
+
+          // Buscar métricas por colaborador
+          const collaboratorMetrics = await query(
+            `SELECT
+              user_id,
+              full_name,
+              horas_registradas,
+              taxa_progresso_user
+            FROM v_task_assignees_metrics
+            WHERE task_id = ?`,
+            [task.id]
+          );
+
+          return {
+            ...task,
+            metrics: metrics || null,
+            collaborator_metrics: collaboratorMetrics || []
+          };
+        })
+      );
+    }
 
     res.json({
       success: true,
-      data: tasks,
+      data: formattedTasks,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: total,
+        total_pages: totalPages
+      }
     });
   } catch (error) {
     next(error);
