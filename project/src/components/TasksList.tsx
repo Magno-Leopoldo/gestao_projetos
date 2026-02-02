@@ -493,9 +493,9 @@ const TasksList: React.FC = () => {
                           return (
                             <div
                               key={assignee.id}
-                              className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-lg border border-gray-300"
+                              className="px-3 py-2 bg-gray-100 rounded-lg border border-gray-300"
                             >
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 mb-1.5">
                                 <span className="text-sm font-medium text-gray-900">
                                   {assignee.full_name}
                                 </span>
@@ -505,12 +505,13 @@ const TasksList: React.FC = () => {
                               </div>
 
                               {collaboratorMetric && parseFloat(collaboratorMetric.horas_registradas) > 0 && (
-                                <div className="flex items-center gap-1 ml-1 pl-2 border-l border-gray-400">
-                                  <span className="text-xs text-blue-600 font-semibold">
-                                    {parseFloat(collaboratorMetric.horas_registradas).toFixed(1)}h
+                                <div className="flex items-center gap-2 text-xs">
+                                  <span className="text-blue-600 font-semibold">
+                                    {parseFloat(collaboratorMetric.horas_registradas).toFixed(1)}h registradas
                                   </span>
-                                  <span className="text-xs text-gray-500">
-                                    ({parseFloat(collaboratorMetric.taxa_progresso_user).toFixed(0)}%)
+                                  <span className="text-gray-400">|</span>
+                                  <span className="text-gray-700">
+                                    {parseFloat(collaboratorMetric.taxa_progresso_user).toFixed(0)}% completo
                                   </span>
                                 </div>
                               )}
