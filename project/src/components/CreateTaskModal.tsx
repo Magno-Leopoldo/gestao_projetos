@@ -104,8 +104,9 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 
   const loadAvailableTasks = async () => {
     try {
-      const tasks = await tasksService.getByStage(stageId);
-      setAvailableTasks(tasks || []);
+      const result = await tasksService.getByStage(stageId, { page: 1, limit: 1000 });
+      const tasks = result.data || [];
+      setAvailableTasks(tasks);
     } catch (err) {
       console.error('Erro ao carregar tarefas:', err);
       setAvailableTasks([]);
