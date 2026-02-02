@@ -107,25 +107,56 @@ export async function validateUserDailyHours(userId, taskId, requestedHours) {
 
 // Validar se usuário pode iniciar nova sessão (limite de 8 horas/dia)
 export async function validateTimeEntryStart(userId) {
-  // Buscar total de horas completadas hoje
-  const [result] = await query(
+  // Buscar total de horas completadas hoje (STOPPED) + horas em progresso (RUNNING/PAUSED)
+  const sessions = await query(
     `SELECT
-      COALESCE(SUM(duration_hours), 0) as completed_hours,
-      SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) as active_sessions
+      id,
+      status,
+      duration_hours,
+      start_time,
+      resume_time,
+      pause_time,
+      duration_total_seconds,
+      paused_total_seconds
     FROM time_entries_sessions
-    WHERE user_id = ? AND DATE(created_at) = CURDATE() AND status IN ('running', 'paused', 'stopped')`,
+    WHERE user_id = ? AND DATE(created_at) = CURDATE()`,
     [userId]
   );
 
-  // Garantir conversão para número
-  const completedHours = parseFloat(result.completed_hours) || 0;
-  const activeSessionCount = parseInt(result.active_sessions) || 0;
+  let totalHours = 0;
+  let activeSessionCount = 0;
+
+  // Calcular horas considerando sessões em progresso
+  sessions.forEach((session) => {
+    if (session.status === 'stopped') {
+      // Sessão finalizada: usar duration_hours registrado
+      totalHours += parseFloat(session.duration_hours) || 0;
+    } else if (session.status === 'running' || session.status === 'paused') {
+      // Sessão ativa: usar duration_total_seconds + tempo acumulado
+      const secondsWorked = parseFloat(session.duration_total_seconds) || 0;
+      const hoursWorked = secondsWorked / 3600;
+
+      // Se está rodando, adicionar tempo desde último resume/start
+      if (session.status === 'running') {
+        const startTime = new Date(session.resume_time || session.start_time);
+        const nowSeconds = (new Date() - startTime) / 1000;
+        totalHours += (secondsWorked + nowSeconds) / 3600;
+      } else {
+        // Se pausado, usar só os segundos trabalhados
+        totalHours += hoursWorked;
+      }
+
+      activeSessionCount++;
+    }
+  });
+
+  const completedHours = parseFloat(totalHours.toFixed(2));
   const available = 8 - completedHours;
   const canStart = available > 0;
 
   return {
     can_start: canStart,
-    completed_hours_today: parseFloat(completedHours.toFixed(2)),
+    completed_hours_today: completedHours,
     available_hours: Math.max(0, parseFloat(available.toFixed(2))),
     max_hours: 8,
     active_sessions: activeSessionCount,
