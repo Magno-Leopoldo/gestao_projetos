@@ -522,19 +522,19 @@ const TasksList: React.FC = () => {
 
                       {/* Total metrics summary */}
                       {task.metrics && parseFloat(task.metrics.total_horas_reais) > 0 && (
-                        <div className="mt-2 flex gap-3 text-xs items-center">
+                        <div className="mt-2 flex gap-3 text-xs">
                           <span className="text-gray-600">
                             Total: <span className="font-semibold text-gray-900">{parseFloat(task.metrics.total_horas_reais).toFixed(1)}h</span>
                           </span>
+                          <span className="text-gray-600">
+                            Progresso: <span className="font-semibold text-blue-600">{parseFloat(task.metrics.taxa_media_percent).toFixed(0)}%</span>
+                          </span>
                           {task.metrics.status_risco !== 'NO_PRAZO' && (
-                            <>
-                              <span className="text-gray-300">•</span>
-                              <span className={`font-semibold ${
-                                task.metrics.status_risco === 'CRITICO' ? 'text-red-600' : 'text-yellow-600'
-                              }`}>
-                                {task.metrics.status_risco === 'CRITICO' ? '🔴 Crítico' : '⚠️ Risco'}
-                              </span>
-                            </>
+                            <span className={`font-semibold ${
+                              task.metrics.status_risco === 'CRITICO' ? 'text-red-600' : 'text-yellow-600'
+                            }`}>
+                              {task.metrics.status_risco === 'CRITICO' ? '🔴 Crítico' : '⚠️ Risco'}
+                            </span>
                           )}
                         </div>
                       )}
