@@ -386,6 +386,15 @@ export const stopTimeEntry = async (req, res, next) => {
       data: updatedSession,
     });
   } catch (error) {
+    // Tratar erro de limite de horas diárias (trigger do MySQL)
+    if (error.code === 'ER_SIGNAL_EXCEPTION' && error.sqlMessage?.includes('Limite de 8 horas')) {
+      return res.status(400).json({
+        success: false,
+        error: 'DAILY_LIMIT_EXCEEDED',
+        message: error.sqlMessage || 'Limite de 8 horas diárias excedido para este usuário',
+      });
+    }
+
     next(error);
   }
 };
