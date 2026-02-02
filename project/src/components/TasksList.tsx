@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Plus, Search, X } from 'lucide-react';
-import { Task, TaskStatus, PRIORITY_LABELS, PRIORITY_COLORS, STATUS_LABELS, STATUS_COLORS } from '../types';
+import { Task, TaskStatus, TaskPriority, PRIORITY_LABELS, PRIORITY_COLORS, STATUS_LABELS, STATUS_COLORS } from '../types';
 import { tasksService } from '../services/tasksService';
 import { projectsService } from '../services/projectsService';
 import { stagesService } from '../services/stagesService';
@@ -29,6 +29,8 @@ const TasksList: React.FC = () => {
   const [searchText, setSearchText] = useState<string>('');
   const [selectedUser, setSelectedUser] = useState<number | null>(null);
   const [availableUsers, setAvailableUsers] = useState<TaskUser[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState<TaskStatus | null>(null);
+  const [selectedPriority, setSelectedPriority] = useState<TaskPriority | null>(null);
 
   useEffect(() => {
     if (projectId && stageId) {
@@ -131,7 +133,7 @@ const TasksList: React.FC = () => {
     return `P${pId}.E${sId}.T${taskId}`;
   };
 
-  // ✅ NOVO: Filtrar por busca de texto e usuário, depois ordenar
+  // ✅ NOVO: Filtrar por busca de texto, usuário, status e prioridade, depois ordenar
   const getFilteredAndSortedTasks = () => {
     // 1. Filtrar por texto de busca (título e descrição)
     let filtered = tasks.filter((task) => {
@@ -153,7 +155,17 @@ const TasksList: React.FC = () => {
       });
     }
 
-    // 3. Ordenar
+    // 3. Filtrar por status selecionado
+    if (selectedStatus) {
+      filtered = filtered.filter((task) => task.status === selectedStatus);
+    }
+
+    // 4. Filtrar por prioridade selecionada
+    if (selectedPriority) {
+      filtered = filtered.filter((task) => task.priority === selectedPriority);
+    }
+
+    // 5. Ordenar
     const sorted = [...filtered];
     switch (sortBy) {
       case 'order':
@@ -275,6 +287,36 @@ const TasksList: React.FC = () => {
                 </select>
               </div>
             )}
+
+            {/* Status Filter */}
+            <div className="min-w-xs">
+              <select
+                value={selectedStatus || ''}
+                onChange={(e) => setSelectedStatus(e.target.value ? (e.target.value as TaskStatus) : null)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+              >
+                <option value="">📋 Todos os status</option>
+                <option value="novo">{STATUS_LABELS.novo}</option>
+                <option value="em_desenvolvimento">{STATUS_LABELS.em_desenvolvimento}</option>
+                <option value="analise_tecnica">{STATUS_LABELS.analise_tecnica}</option>
+                <option value="concluido">{STATUS_LABELS.concluido}</option>
+                <option value="refaca">{STATUS_LABELS.refaca}</option>
+              </select>
+            </div>
+
+            {/* Priority Filter */}
+            <div className="min-w-xs">
+              <select
+                value={selectedPriority || ''}
+                onChange={(e) => setSelectedPriority(e.target.value ? (e.target.value as TaskPriority) : null)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+              >
+                <option value="">⚡ Todas as prioridades</option>
+                <option value="high">{PRIORITY_LABELS.high}</option>
+                <option value="medium">{PRIORITY_LABELS.medium}</option>
+                <option value="low">{PRIORITY_LABELS.low}</option>
+              </select>
+            </div>
           </div>
 
           {/* Sorting Controls */}
@@ -299,14 +341,32 @@ const TasksList: React.FC = () => {
           </div>
 
           {/* Active Filters Summary */}
-          {(searchText || selectedUser) && (
+          {(searchText || selectedUser || selectedStatus || selectedPriority) && (
             <div className="text-sm text-gray-600 p-3 bg-blue-50 rounded-lg border border-blue-200">
               📋 Filtros ativos:
               {searchText && <span className="ml-2 font-medium">Busca: &quot;{searchText}&quot;</span>}
-              {searchText && selectedUser && <span className="mx-1">•</span>}
+              {(searchText || selectedUser || selectedStatus || selectedPriority) && (
+                <>
+                  {(searchText && selectedUser) || (searchText && selectedStatus) || (searchText && selectedPriority) ? (
+                    <span className="mx-1">•</span>
+                  ) : null}
+                </>
+              )}
               {selectedUser && (
                 <span className="font-medium">
                   Usuário: {availableUsers.find((u) => u.id === selectedUser)?.name}
+                </span>
+              )}
+              {selectedUser && (selectedStatus || selectedPriority) && <span className="mx-1">•</span>}
+              {selectedStatus && (
+                <span className="font-medium">
+                  Status: {STATUS_LABELS[selectedStatus]}
+                </span>
+              )}
+              {selectedStatus && selectedPriority && <span className="mx-1">•</span>}
+              {selectedPriority && (
+                <span className="font-medium">
+                  Prioridade: {PRIORITY_LABELS[selectedPriority]}
                 </span>
               )}
             </div>
@@ -450,12 +510,12 @@ const TasksList: React.FC = () => {
         {/* Empty State */}
         {!loading && getFilteredAndSortedTasks().length === 0 && (
           <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-            <div className="text-6xl mb-4">{searchText || selectedUser ? '🔍' : '✓'}</div>
+            <div className="text-6xl mb-4">{searchText || selectedUser || selectedStatus || selectedPriority ? '🔍' : '✓'}</div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              {searchText || selectedUser ? 'Nenhuma tarefa encontrada' : 'Nenhuma tarefa nesta etapa'}
+              {searchText || selectedUser || selectedStatus || selectedPriority ? 'Nenhuma tarefa encontrada' : 'Nenhuma tarefa nesta etapa'}
             </h3>
             <p className="text-gray-600 mb-6">
-              {searchText || selectedUser
+              {searchText || selectedUser || selectedStatus || selectedPriority
                 ? 'Tente ajustar seus filtros ou critérios de busca'
                 : 'Esta etapa não possui tarefas definidas'}
             </p>
