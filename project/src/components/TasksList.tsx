@@ -505,14 +505,8 @@ const TasksList: React.FC = () => {
                               </div>
 
                               {collaboratorMetric && parseFloat(collaboratorMetric.horas_registradas) > 0 && (
-                                <div className="flex items-center gap-2 text-xs">
-                                  <span className="text-blue-600 font-semibold">
-                                    {parseFloat(collaboratorMetric.horas_registradas).toFixed(1)}h registradas
-                                  </span>
-                                  <span className="text-gray-400">|</span>
-                                  <span className="text-gray-700">
-                                    {parseFloat(collaboratorMetric.taxa_progresso_user).toFixed(0)}% completo
-                                  </span>
+                                <div className="text-xs text-blue-600 font-semibold">
+                                  {parseFloat(collaboratorMetric.horas_registradas).toFixed(1)}h registradas
                                 </div>
                               )}
                             </div>
@@ -525,6 +519,10 @@ const TasksList: React.FC = () => {
                         <div className="mt-2 flex gap-3 text-xs items-center">
                           <span className="text-gray-600">
                             Total: <span className="font-semibold text-gray-900">{parseFloat(task.metrics.total_horas_reais).toFixed(1)}h</span>
+                          </span>
+                          <span className="text-gray-300">•</span>
+                          <span className="text-gray-600">
+                            Conclusão: <span className="font-semibold text-blue-600">{parseFloat(task.metrics.taxa_media_percent).toFixed(0)}%</span>
                           </span>
                           {task.metrics.status_risco !== 'NO_PRAZO' && (
                             <>
