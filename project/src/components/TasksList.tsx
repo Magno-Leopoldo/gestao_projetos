@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Plus, Search, X } from 'lucide-react';
-import { Task, TaskStatus, TaskPriority, PRIORITY_LABELS, PRIORITY_COLORS, STATUS_LABELS, STATUS_COLORS } from '../types';
+import { Task, TaskStatus, TaskPriority, TaskWithMetrics, PaginatedTasksResponse, PRIORITY_LABELS, PRIORITY_COLORS, STATUS_LABELS, STATUS_COLORS } from '../types';
 import { tasksService } from '../services/tasksService';
 import { projectsService } from '../services/projectsService';
 import { stagesService } from '../services/stagesService';
@@ -19,7 +19,7 @@ const TasksList: React.FC = () => {
   const navigate = useNavigate();
   const { projectId, stageId } = useParams<{ projectId: string; stageId: string }>();
   const { profile, user } = useAuth();
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasks, setTasks] = useState<TaskWithMetrics[]>([]);
   const [projectName, setProjectName] = useState<string>('');
   const [stageName, setStageName] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -31,12 +31,16 @@ const TasksList: React.FC = () => {
   const [availableUsers, setAvailableUsers] = useState<TaskUser[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<TaskStatus | null>(null);
   const [selectedPriority, setSelectedPriority] = useState<TaskPriority | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalTasks, setTotalTasks] = useState(0);
+  const [tasksPerPage] = useState(20);
 
   useEffect(() => {
     if (projectId && stageId) {
       loadData(parseInt(projectId), parseInt(stageId));
     }
-  }, [projectId, stageId]);
+  }, [projectId, stageId, currentPage]);
 
   const loadData = async (pId: number, sId: number) => {
     setLoading(true);
@@ -50,48 +54,42 @@ const TasksList: React.FC = () => {
       const stageResult = await stagesService.getById(sId);
       setStageName(stageResult.name);
 
-      // Load tasks
-      const tasksResult = await tasksService.getByStage(sId);
-      let filteredTasks = tasksResult || [];
+      // Load tasks with pagination and metrics
+      const result: PaginatedTasksResponse = await tasksService.getByStage(sId, {
+        page: currentPage,
+        limit: tasksPerPage,
+        includeMetrics: true
+      });
+
+      let filteredTasks = result.data || [];
 
       // ✅ FILTRO: Se é user, mostrar apenas tarefas onde está atribuído
       if (profile?.role === 'user' && user?.id) {
         filteredTasks = filteredTasks.filter((task: any) => {
-          // assignee_ids é uma string "7,8" ou null
-          if (!task.assignee_ids) return false;
-
-          const assigneeIds = task.assignee_ids
-            .toString()
-            .split(',')
-            .map((id: string) => parseInt(id.trim()));
-
-          return assigneeIds.includes(user.id);
+          // Agora assignees_array é um array de objetos
+          if (!task.assignees_array || !Array.isArray(task.assignees_array)) return false;
+          return task.assignees_array.some((assignee: any) => assignee.id === user.id);
         });
       }
       // Se é supervisor ou admin: mostra todas as tarefas
 
       setTasks(filteredTasks);
 
+      // Atualizar estados de paginação
+      setTotalPages(result.pagination.total_pages);
+      setTotalTasks(result.pagination.total);
+
       // ✅ Extrair usuários únicos para o filtro
       const usersMap = new Map<number, TaskUser>();
       filteredTasks.forEach((task: any) => {
-        // Campo `assignees` vem do backend como "Id1,Id2,Id3" (GROUP_CONCAT de ids)
-        // Precisamos buscar o mapeamento id->nome
-        if (task.assignee_ids) {
-          const assigneeIds = task.assignee_ids
-            .toString()
-            .split(',')
-            .map((id: string) => parseInt(id.trim()));
-
-          // Campo `assignees` contém os nomes separados por vírgula
-          const assigneeNames = task.assignees
-            ? task.assignees.toString().split(',').map((n: string) => n.trim())
-            : [];
-
-          assigneeIds.forEach((id: number, index: number) => {
-            if (!usersMap.has(id)) {
-              const name = assigneeNames[index] || `Usuário ${id}`;
-              usersMap.set(id, { id, name });
+        // Agora assignees_array é um array de objetos
+        if (task.assignees_array && Array.isArray(task.assignees_array)) {
+          task.assignees_array.forEach((assignee: any) => {
+            if (!usersMap.has(assignee.id)) {
+              usersMap.set(assignee.id, {
+                id: assignee.id,
+                name: assignee.full_name
+              });
             }
           });
         }
@@ -146,12 +144,8 @@ const TasksList: React.FC = () => {
     // 2. Filtrar por usuário selecionado
     if (selectedUser) {
       filtered = filtered.filter((task) => {
-        if (!task.assignee_ids) return false;
-        const assigneeIds = task.assignee_ids
-          .toString()
-          .split(',')
-          .map((id: string) => parseInt(id.trim()));
-        return assigneeIds.includes(selectedUser);
+        if (!task.assignees_array || task.assignees_array.length === 0) return false;
+        return task.assignees_array.some((assignee) => assignee.id === selectedUser);
       });
     }
 
@@ -486,6 +480,66 @@ const TasksList: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Assignees Section */}
+                  {task.assignees_array && task.assignees_array.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <p className="text-xs text-gray-600 mb-2">Atribuído a:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {task.assignees_array.map((assignee) => {
+                          const collaboratorMetric = task.collaborator_metrics?.find(
+                            (cm) => cm.user_id === assignee.id
+                          );
+
+                          return (
+                            <div
+                              key={assignee.id}
+                              className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-lg border border-gray-300"
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-medium text-gray-900">
+                                  {assignee.full_name}
+                                </span>
+                                <span className="text-xs text-gray-600">
+                                  ({assignee.daily_hours}h/dia)
+                                </span>
+                              </div>
+
+                              {collaboratorMetric && collaboratorMetric.horas_registradas > 0 && (
+                                <div className="flex items-center gap-1 ml-1 pl-2 border-l border-gray-400">
+                                  <span className="text-xs text-blue-600 font-semibold">
+                                    {collaboratorMetric.horas_registradas.toFixed(1)}h
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    ({collaboratorMetric.taxa_progresso_user.toFixed(0)}%)
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Total metrics summary */}
+                      {task.metrics && task.metrics.total_horas_reais > 0 && (
+                        <div className="mt-2 flex gap-3 text-xs">
+                          <span className="text-gray-600">
+                            Total: <span className="font-semibold text-gray-900">{task.metrics.total_horas_reais.toFixed(1)}h</span>
+                          </span>
+                          <span className="text-gray-600">
+                            Progresso: <span className="font-semibold text-blue-600">{task.metrics.taxa_media_percent.toFixed(0)}%</span>
+                          </span>
+                          {task.metrics.status_risco !== 'NO_PRAZO' && (
+                            <span className={`font-semibold ${
+                              task.metrics.status_risco === 'CRITICO' ? 'text-red-600' : 'text-yellow-600'
+                            }`}>
+                              {task.metrics.status_risco === 'CRITICO' ? '🔴 Crítico' : '⚠️ Risco'}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Due Date */}
                   {task.due_date && (
                     <div className="mt-4 pt-4 border-t border-gray-200">
@@ -504,6 +558,31 @@ const TasksList: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Pagination Controls */}
+        {!loading && tasks.length > 0 && totalPages > 1 && (
+          <div className="mt-8 flex justify-center items-center gap-4">
+            <button
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 bg-white border border-gray-300 rounded-lg font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              ← Anterior
+            </button>
+
+            <span className="text-sm text-gray-600">
+              Página {currentPage} de {totalPages} ({totalTasks} tarefas)
+            </span>
+
+            <button
+              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="px-4 py-2 bg-white border border-gray-300 rounded-lg font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Próxima →
+            </button>
           </div>
         )}
 
