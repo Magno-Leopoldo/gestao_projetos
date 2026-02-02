@@ -504,13 +504,13 @@ const TasksList: React.FC = () => {
                                 </span>
                               </div>
 
-                              {collaboratorMetric && collaboratorMetric.horas_registradas > 0 && (
+                              {collaboratorMetric && parseFloat(collaboratorMetric.horas_registradas) > 0 && (
                                 <div className="flex items-center gap-1 ml-1 pl-2 border-l border-gray-400">
                                   <span className="text-xs text-blue-600 font-semibold">
-                                    {collaboratorMetric.horas_registradas.toFixed(1)}h
+                                    {parseFloat(collaboratorMetric.horas_registradas).toFixed(1)}h
                                   </span>
                                   <span className="text-xs text-gray-500">
-                                    ({collaboratorMetric.taxa_progresso_user.toFixed(0)}%)
+                                    ({parseFloat(collaboratorMetric.taxa_progresso_user).toFixed(0)}%)
                                   </span>
                                 </div>
                               )}
@@ -520,13 +520,13 @@ const TasksList: React.FC = () => {
                       </div>
 
                       {/* Total metrics summary */}
-                      {task.metrics && task.metrics.total_horas_reais > 0 && (
+                      {task.metrics && parseFloat(task.metrics.total_horas_reais) > 0 && (
                         <div className="mt-2 flex gap-3 text-xs">
                           <span className="text-gray-600">
-                            Total: <span className="font-semibold text-gray-900">{task.metrics.total_horas_reais.toFixed(1)}h</span>
+                            Total: <span className="font-semibold text-gray-900">{parseFloat(task.metrics.total_horas_reais).toFixed(1)}h</span>
                           </span>
                           <span className="text-gray-600">
-                            Progresso: <span className="font-semibold text-blue-600">{task.metrics.taxa_media_percent.toFixed(0)}%</span>
+                            Progresso: <span className="font-semibold text-blue-600">{parseFloat(task.metrics.taxa_media_percent).toFixed(0)}%</span>
                           </span>
                           {task.metrics.status_risco !== 'NO_PRAZO' && (
                             <span className={`font-semibold ${
