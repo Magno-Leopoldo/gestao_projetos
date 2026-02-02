@@ -7,10 +7,27 @@ export const tasksService = {
     return response.data.data;
   },
 
-  // Listar tarefas de uma etapa
-  async getByStage(stageId: number) {
-    const response = await apiClient.get(`/tasks/stage/${stageId}`);
-    return response.data.data;
+  // Listar tarefas de uma etapa com paginação e métricas opcionais
+  async getByStage(
+    stageId: number,
+    options?: {
+      page?: number;
+      limit?: number;
+      includeMetrics?: boolean
+    }
+  ) {
+    const page = options?.page || 1;
+    const limit = options?.limit || 20;
+    const includeMetrics = options?.includeMetrics || false;
+
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+      ...(includeMetrics && { include_metrics: 'true' })
+    });
+
+    const response = await apiClient.get(`/tasks/stage/${stageId}?${params}`);
+    return response.data;
   },
 
   // Obter tarefa por ID

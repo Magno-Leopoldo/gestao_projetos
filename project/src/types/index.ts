@@ -120,6 +120,42 @@ export interface TaskWithAssignees extends Task {
   assignees: User[];
 }
 
+export interface TaskAssigneeWithMetrics {
+  id: number;
+  full_name: string;
+  email: string;
+  role: UserRole;
+  daily_hours: number;
+}
+
+export interface TaskWithMetrics extends Task {
+  assignee_ids?: string; // Para compatibilidade
+  assignees?: string; // Para compatibilidade (string)
+  assignees_array?: TaskAssigneeWithMetrics[]; // Novo formato
+  metrics?: {
+    total_horas_reais: number;
+    total_colaboradores: number;
+    taxa_media_percent: number;
+    status_risco: 'NO_PRAZO' | 'RISCO' | 'CRITICO';
+  };
+  collaborator_metrics?: Array<{
+    user_id: number;
+    full_name: string;
+    horas_registradas: number;
+    taxa_progresso_user: number;
+  }>;
+}
+
+export interface PaginatedTasksResponse {
+  data: TaskWithMetrics[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    total_pages: number;
+  };
+}
+
 export interface TaskWithDetails extends TaskWithAssignees {
   project_id: number;
   project_name: string;
