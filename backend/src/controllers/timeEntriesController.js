@@ -360,16 +360,25 @@ export const stopTimeEntry = async (req, res, next) => {
       );
 
       // Atualizar data_begin_real da tarefa se for a primeira sessão
-      const [task] = await conn.execute(
-        'SELECT date_begin_real FROM tasks WHERE id = ?',
-        [taskId]
-      );
-
-      if (task && task.length > 0 && !task[0].date_begin_real) {
-        await conn.execute(
-          'UPDATE tasks SET date_begin_real = DATE(NOW()) WHERE id = ?',
+      // ✅ IMPORTANTE: Não deixar este erro bloquear o STOP da sessão
+      // O limite de 8 horas só deve impedir START, não STOP
+      try {
+        const [task] = await conn.execute(
+          'SELECT date_begin_real FROM tasks WHERE id = ?',
           [taskId]
         );
+
+        if (task && task.length > 0 && !task[0].date_begin_real) {
+          await conn.execute(
+            'UPDATE tasks SET date_begin_real = DATE(NOW()) WHERE id = ?',
+            [taskId]
+          );
+        }
+      } catch (updateError) {
+        // Se falhar por validação de horas, ignorar e permitir o STOP
+        // A sessão já foi atualizada com sucesso, só não conseguimos marcar data_begin_real
+        console.warn('Aviso: Não foi possível atualizar data_begin_real:', updateError.message);
+        // Continuar mesmo com erro - stopping deve sempre ser permitido
       }
 
       return sessionId;
