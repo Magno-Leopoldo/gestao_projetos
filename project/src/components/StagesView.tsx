@@ -8,19 +8,70 @@ import { useAuth } from '../contexts/AuthContext';
 import { Project, ProjectStage } from '../types';
 import CreateStageModal from './CreateStageModal';
 
+type SortBy = 'order' | 'name' | 'estimated_hours';
+
+interface StageFilters {
+  search?: string;
+  type?: 'all' | 'parallel' | 'sequential';
+}
+
 const StagesView: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
   const { user, profile } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [stages, setStages] = useState<ProjectStage[]>([]);
+  const [allStages, setAllStages] = useState<ProjectStage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [filters, setFilters] = useState<StageFilters>({ type: 'all' });
+  const [sortBy, setSortBy] = useState<SortBy>('order');
 
   useEffect(() => {
     loadData();
   }, [projectId]);
+
+  useEffect(() => {
+    applyFiltersAndSort();
+  }, [filters, sortBy, allStages]);
+
+  const applyFiltersAndSort = () => {
+    let filtered = [...allStages];
+
+    // Filtrar por busca
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      filtered = filtered.filter(
+        (stage) =>
+          stage.name.toLowerCase().includes(searchLower) ||
+          (stage.description && stage.description.toLowerCase().includes(searchLower))
+      );
+    }
+
+    // Filtrar por tipo
+    if (filters.type && filters.type !== 'all') {
+      filtered = filtered.filter((stage) => {
+        const isParallel = stage.is_parallel === true || stage.is_parallel === 1;
+        return filters.type === 'parallel' ? isParallel : !isParallel;
+      });
+    }
+
+    // Ordenar
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'estimated_hours':
+          return (a.estimated_hours || 0) - (b.estimated_hours || 0);
+        case 'order':
+        default:
+          return (a.order || 0) - (b.order || 0);
+      }
+    });
+
+    setStages(filtered);
+  };
 
   const loadData = async () => {
     if (!projectId) {
@@ -79,7 +130,7 @@ const StagesView: React.FC = () => {
           });
         }
 
-        setStages(stagesWithTasks);
+        setAllStages(stagesWithTasks);
       }
     } catch (err: any) {
       const errorMsg = err.response?.data?.message || err.message || 'Erro ao carregar dados';
@@ -156,6 +207,68 @@ const StagesView: React.FC = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Filters */}
+        <div className="mb-6 space-y-4">
+          {/* Search Box */}
+          <div>
+            <input
+              type="text"
+              placeholder="Buscar etapas por nome ou descrição..."
+              value={filters.search || ''}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* Filter and Sort Controls */}
+          <div className="flex gap-4 flex-wrap">
+            {/* Type Filter */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setFilters({ ...filters, type: 'all' })}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  filters.type === 'all'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Todas
+              </button>
+              <button
+                onClick={() => setFilters({ ...filters, type: 'parallel' })}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  filters.type === 'parallel'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Paralelas
+              </button>
+              <button
+                onClick={() => setFilters({ ...filters, type: 'sequential' })}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  filters.type === 'sequential'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Sequenciais
+              </button>
+            </div>
+
+            {/* Sort Select */}
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortBy)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="order">Ordenar por: Ordem</option>
+              <option value="name">Ordenar por: Nome</option>
+              <option value="estimated_hours">Ordenar por: Horas estimadas</option>
+            </select>
+          </div>
+        </div>
+
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
             <p className="text-red-700 font-medium">❌ {error}</p>
