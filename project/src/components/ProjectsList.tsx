@@ -40,6 +40,11 @@ const ProjectsList: React.FC = () => {
     loadProjects();
   }, []);
 
+  // Quando status ou search mudam, recarregar projetos da API
+  useEffect(() => {
+    loadProjects();
+  }, [filters.status, filters.search]);
+
   useEffect(() => {
     applyFilters();
   }, [filters, allProjects]);
@@ -79,6 +84,11 @@ const ProjectsList: React.FC = () => {
 
   const applyFilters = () => {
     let filtered = [...allProjects];
+
+    // Filtrar por status
+    if (filters.status) {
+      filtered = filtered.filter((project) => project.status === filters.status);
+    }
 
     // Filtrar por supervisor
     if (filters.supervisorId) {
@@ -133,12 +143,12 @@ const ProjectsList: React.FC = () => {
 
   const getStatusBadgeColor = (status: ProjectStatus) => {
     const colors: Record<ProjectStatus, string> = {
-      active: 'bg-green-100 text-green-800',
-      completed: 'bg-blue-100 text-blue-800',
-      on_hold: 'bg-yellow-100 text-yellow-800',
-      cancelled: 'bg-red-100 text-red-800',
+      active: 'bg-green-200 text-green-900 border border-green-500 hover:scale-105 hover:shadow-md transition-all',
+      completed: 'bg-blue-200 text-blue-900 border border-blue-500 hover:scale-105 hover:shadow-md transition-all',
+      on_hold: 'bg-yellow-200 text-yellow-900 border border-yellow-500 hover:scale-105 hover:shadow-md transition-all',
+      cancelled: 'bg-red-200 text-red-900 border border-red-500 hover:scale-105 hover:shadow-md transition-all',
     };
-    return colors[status] || 'bg-gray-100 text-gray-800';
+    return colors[status] || 'bg-gray-200 text-gray-900 border border-gray-400 hover:scale-105 hover:shadow-md transition-all';
   };
 
   return (
