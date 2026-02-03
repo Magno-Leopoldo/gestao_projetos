@@ -170,7 +170,7 @@ const ProjectsList: React.FC = () => {
         </div>
 
         {/* Filters */}
-        <div className="mb-6 space-y-4 bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+        <div className="mb-6 space-y-4 bg-white p-4 rounded-lg border border-gray-200 shadow-md">
           {/* Search Box */}
           <div>
             <input
@@ -286,7 +286,7 @@ const ProjectsList: React.FC = () => {
             {projects.map((project) => (
               <div
                 key={project.id}
-                className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow border border-gray-200 overflow-hidden"
+                className="bg-white rounded-lg shadow-lg hover:shadow-xl transition-shadow border border-gray-200 overflow-hidden"
               >
                 {/* Card Header */}
                 <div className="p-6">
