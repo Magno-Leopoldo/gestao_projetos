@@ -7,6 +7,7 @@ import Layout from './Layout';
 
 interface ProjectFilters {
   status?: ProjectStatus;
+  search?: string;
 }
 
 const ProjectsList: React.FC = () => {
@@ -30,7 +31,14 @@ const ProjectsList: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await projectsService.getAll();
+      const params: { status?: string; search?: string } = {};
+      if (filters.status) {
+        params.status = filters.status;
+      }
+      if (filters.search) {
+        params.search = filters.search;
+      }
+      const result = await projectsService.getAll(params);
       setProjects(result || []);
     } catch (err: any) {
       const errorMsg = err.response?.data?.message || err.message || 'Erro ao carregar projetos';
@@ -43,9 +51,9 @@ const ProjectsList: React.FC = () => {
 
   const handleStatusFilter = (status: ProjectStatus | null) => {
     if (status === null) {
-      setFilters({});
+      setFilters({ search: filters.search });
     } else {
-      setFilters({ status });
+      setFilters({ ...filters, status });
     }
   };
 
@@ -73,47 +81,71 @@ const ProjectsList: React.FC = () => {
         </div>
 
         {/* Filters */}
-        <div className="mb-6 flex gap-2 flex-wrap">
-          <button
-            onClick={() => handleStatusFilter(null)}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              !filters.status
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            Todos
-          </button>
-          <button
-            onClick={() => handleStatusFilter('active')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              filters.status === 'active'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            Ativos
-          </button>
-          <button
-            onClick={() => handleStatusFilter('completed')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              filters.status === 'completed'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            Concluídos
-          </button>
-          <button
-            onClick={() => handleStatusFilter('on_hold')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              filters.status === 'on_hold'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            Em Espera
-          </button>
+        <div className="mb-6 space-y-4">
+          {/* Search Box */}
+          <div>
+            <input
+              type="text"
+              placeholder="Buscar projetos por nome ou descrição..."
+              value={filters.search || ''}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* Status Filter Buttons */}
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => handleStatusFilter(null)}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                !filters.status
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              Todos
+            </button>
+            <button
+              onClick={() => handleStatusFilter('active')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                filters.status === 'active'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              Ativos
+            </button>
+            <button
+              onClick={() => handleStatusFilter('completed')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                filters.status === 'completed'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              Concluídos
+            </button>
+            <button
+              onClick={() => handleStatusFilter('on_hold')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                filters.status === 'on_hold'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              Em Espera
+            </button>
+            <button
+              onClick={() => handleStatusFilter('cancelled')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                filters.status === 'cancelled'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              Cancelados
+            </button>
+          </div>
         </div>
 
         {/* Error Message */}
