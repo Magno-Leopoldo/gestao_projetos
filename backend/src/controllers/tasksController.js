@@ -2,6 +2,7 @@ import { query, transaction } from '../config/database.js';
 import {
   validateDailyHours,
   validateUserDailyHours,
+  validateUserDailyHoursWithWarning,
   validateStatusTransition,
   getTaskHoursBreakdown,
   validateTaskDependencies,
@@ -829,21 +830,13 @@ export const assignUsersToTask = async (req, res, next) => {
         continue;
       }
 
-      // ✅ VALIDAÇÃO RIGOROSA: Verificar limite de 8h/dia do usuário
-      // Atribuição é um COMPROMISSO, então devemos garantir que não ultrapasse 8h/dia
-      // (somando TODAS as tarefas do usuário)
-      const validation = await validateUserDailyHours(user_id, taskId, userHours);
+      // ✅ NOVA VALIDAÇÃO: Permitir com avisos se exceder limite
+      // Antes: validateUserDailyHours bloqueava (success: false)
+      // Agora: validateUserDailyHoursWithWarning permite (success: true sempre)
+      const validation = await validateUserDailyHoursWithWarning(user_id, taskId, userHours);
 
-      if (!validation.success) {
-        errors.push({
-          user_id,
-          error: validation.error,
-          current_hours: validation.validation.current_hours,
-          requested_hours: validation.validation.requested_hours,
-          available_hours: validation.validation.available_hours,
-        });
-        continue;
-      }
+      // validation.success sempre será true, mas pode ter warnings
+      const userWarnings = validation.warnings || [];
 
       // Buscar dados do usuário para resposta
       const [user] = await query('SELECT full_name FROM users WHERE id = ?', [user_id]);
@@ -862,6 +855,7 @@ export const assignUsersToTask = async (req, res, next) => {
           daily_hours: userHours,
           success: true,
           validation: validation.validation,
+          warnings: userWarnings  // ← ADICIONAR avisos à resposta
         });
       } catch (err) {
         errors.push({
@@ -873,13 +867,17 @@ export const assignUsersToTask = async (req, res, next) => {
 
     // Retornar resultado
     const allSuccessful = errors.length === 0;
+    const hasWarnings = results.some(r => r.warnings && r.warnings.length > 0);
 
     res.json({
       success: allSuccessful,
       data: results,
       errors: errors.length > 0 ? errors : undefined,
+      warnings: hasWarnings ? results.flatMap(r => r.warnings || []) : undefined,  // ← NOVO
       message: allSuccessful
-        ? `Todos os ${results.length} usuários atribuídos com sucesso`
+        ? hasWarnings
+          ? `Todos os ${results.length} usuários atribuídos com AVISOS de limite de horas`
+          : `Todos os ${results.length} usuários atribuídos com sucesso`
         : `${results.length} atribuição(ões) bem-sucedida(s), ${errors.length} erro(s)`,
     });
   } catch (error) {

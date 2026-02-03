@@ -102,6 +102,118 @@ export async function validateUserDailyHours(userId, taskId, requestedHours) {
 }
 
 // =====================================================
+// VALIDAÇÕES DE DAILY HOURS COM AVISOS (NOVA FASE)
+// =====================================================
+
+// Validar se o usuário pode ser atribuído com avisos (não bloqueia mais)
+export async function validateUserDailyHoursWithWarning(userId, taskId, requestedHours) {
+  const validation = await validateDailyHours(userId, taskId, requestedHours);
+
+  // ✅ SEMPRE retorna success: true (não bloqueia mais)
+  if (!validation.is_valid) {
+    return {
+      success: true,  // ← MUDANÇA CHAVE: Permite mesmo ultrapassando limite
+      warnings: [{
+        type: 'warning',
+        severity: 'high',
+        message: `Usuário já possui ${validation.current_hours}h/dia alocadas. ` +
+                 `Atribuindo mais ${validation.requested_hours}h totalizaria ${validation.total_hours}h/dia. ` +
+                 `Disponível era ${validation.available_hours}h. Deseja continuar?`,
+        details: {
+          current_hours: validation.current_hours,
+          requested_hours: validation.requested_hours,
+          total_hours: validation.total_hours,
+          exceeds_by: validation.total_hours - 8
+        }
+      }],
+      validation
+    };
+  }
+
+  return { success: true, warnings: [], validation };
+}
+
+// =====================================================
+// VALIDAÇÃO INTELIGENTE DE TIME ENTRIES (NOVA FASE)
+// =====================================================
+
+// Validar se usuário pode iniciar cronômetro considerando horas reais + alocadas
+export async function validateTimeEntryWithAllocation(userId, taskId) {
+  // 1. Buscar horas reais trabalhadas hoje
+  const realTimeValidation = await validateTimeEntryStart(userId);
+
+  // 2. Buscar daily_hours da tarefa para este usuário
+  const [assignment] = await query(
+    `SELECT ta.daily_hours
+     FROM task_assignments ta
+     WHERE ta.task_id = ? AND ta.user_id = ?`,
+    [taskId, userId]
+  );
+
+  if (!assignment) {
+    return {
+      can_start: false,
+      error: 'USER_NOT_ASSIGNED',
+      message: 'Usuário não está atribuído a esta tarefa'
+    };
+  }
+
+  const taskAllocatedHours = parseFloat(assignment.daily_hours) || 0;
+  const realHoursToday = realTimeValidation.completed_hours_today;
+  const projectedTotal = realHoursToday + taskAllocatedHours;
+
+  // 3. BLOQUEAR se ultrapassaria 8h
+  if (projectedTotal > 8) {
+    return {
+      can_start: false,
+      error: 'ALLOCATION_EXCEEDS_DAILY_LIMIT',
+      message: `Você já trabalhou ${realHoursToday.toFixed(2)}h hoje. ` +
+               `Esta tarefa tem ${taskAllocatedHours.toFixed(2)}h alocadas. ` +
+               `Total projetado: ${projectedTotal.toFixed(2)}h (limite: 8h).`,
+      details: {
+        real_hours_today: realHoursToday,
+        task_allocated_hours: taskAllocatedHours,
+        projected_total: parseFloat(projectedTotal.toFixed(2)),
+        max_hours: 8,
+        available_hours: Math.max(0, parseFloat((8 - realHoursToday).toFixed(2))),
+        exceeds_by: parseFloat((projectedTotal - 8).toFixed(2))
+      },
+      validation: realTimeValidation
+    };
+  }
+
+  // 4. Calcular warning_level
+  let warningLevel = 'low';
+  let warningMessage = null;
+
+  if (projectedTotal >= 7) {
+    warningLevel = 'high';
+    warningMessage = `⚠️ ATENÇÃO: Você já trabalhou ${realHoursToday.toFixed(2)}h hoje. ` +
+                    `Esta tarefa tem ${taskAllocatedHours.toFixed(2)}h alocadas. ` +
+                    `Total projetado: ${projectedTotal.toFixed(2)}h. ` +
+                    `Restam ${(8 - projectedTotal).toFixed(2)}h do limite diário.`;
+  } else if (projectedTotal >= 5) {
+    warningLevel = 'medium';
+    warningMessage = `ℹ️ Você já trabalhou ${realHoursToday.toFixed(2)}h hoje. ` +
+                    `Esta tarefa tem ${taskAllocatedHours.toFixed(2)}h alocadas. ` +
+                    `Total projetado: ${projectedTotal.toFixed(2)}h.`;
+  }
+
+  return {
+    can_start: true,
+    real_hours_today: realHoursToday,
+    task_allocated_hours: taskAllocatedHours,
+    projected_total_hours: parseFloat(projectedTotal.toFixed(2)),
+    available_hours: Math.max(0, parseFloat((8 - realHoursToday).toFixed(2))),
+    max_hours: 8,
+    warning_level: warningLevel,
+    warning_message: warningMessage,
+    active_sessions: realTimeValidation.active_sessions,
+    validation: realTimeValidation
+  };
+}
+
+// =====================================================
 // VALIDAÇÕES DE TIME ENTRIES (FASE 3)
 // =====================================================
 

@@ -1,6 +1,7 @@
 import { query, transaction } from '../config/database.js';
 import {
   validateTimeEntryStart,
+  validateTimeEntryWithAllocation,
   getUserDayStatusSummary,
 } from '../helpers/taskValidations.js';
 
@@ -40,32 +41,39 @@ export const startTimeEntry = async (req, res, next) => {
     }
 
     // =====================================================
-    // VALIDAÇÃO: Limite de 8 horas/dia (FASE 3)
+    // VALIDAÇÃO INTELIGENTE: Horas reais + alocadas da tarefa
     // =====================================================
-    const dailyValidation = await validateTimeEntryStart(userId);
+    // Usar nova validação que considera real_hours_today + task.daily_hours
+    const smartValidation = await validateTimeEntryWithAllocation(userId, taskId);
 
-    if (!dailyValidation.can_start) {
+    if (!smartValidation.can_start) {
+      // Diferenciar erros
+      if (smartValidation.error === 'USER_NOT_ASSIGNED') {
+        return res.status(403).json({
+          success: false,
+          error: 'FORBIDDEN',
+          message: smartValidation.message,
+        });
+      }
+
       return res.status(400).json({
         success: false,
-        error: 'DAILY_LIMIT_EXCEEDED',
-        message: 'Limite de 8 horas diárias já foi atingido',
-        validation: dailyValidation,
+        error: smartValidation.error,  // 'ALLOCATION_EXCEEDS_DAILY_LIMIT'
+        message: smartValidation.message,
+        details: smartValidation.details,
+        validation: smartValidation.validation,
       });
     }
 
     // =====================================================
-    // AVISO: Se está próximo do limite
+    // AVISOS: Se está próximo do limite
     // =====================================================
     const warnings = [];
-    if (dailyValidation.warning_level === 'high') {
+    if (smartValidation.warning_message) {
       warnings.push({
-        type: 'warning',
-        message: `Cuidado! Você já trabalhou ${dailyValidation.completed_hours_today.toFixed(2)} horas. Apenas ${dailyValidation.available_hours.toFixed(2)} horas disponíveis.`,
-      });
-    } else if (dailyValidation.warning_level === 'medium') {
-      warnings.push({
-        type: 'info',
-        message: `${dailyValidation.completed_hours_today.toFixed(2)} horas já registradas. ${dailyValidation.available_hours.toFixed(2)}h restantes.`,
+        type: smartValidation.warning_level === 'high' ? 'warning' : 'info',
+        severity: smartValidation.warning_level,
+        message: smartValidation.warning_message,
       });
     }
 
@@ -104,9 +112,11 @@ export const startTimeEntry = async (req, res, next) => {
       data: newSession,
       warnings: warnings.length > 0 ? warnings : null,
       daily_status: {
-        completed_hours: dailyValidation.completed_hours_today,
-        available_hours: dailyValidation.available_hours,
-        warning_level: dailyValidation.warning_level,
+        real_hours_today: smartValidation.real_hours_today,
+        task_allocated_hours: smartValidation.task_allocated_hours,
+        projected_total: smartValidation.projected_total_hours,
+        available_hours: smartValidation.available_hours,
+        warning_level: smartValidation.warning_level,
       },
     });
   } catch (error) {

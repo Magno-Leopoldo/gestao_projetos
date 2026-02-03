@@ -32,6 +32,7 @@ const AssignUsersModal: React.FC<AssignUsersModalProps> = ({
   const [userDailyHours, setUserDailyHours] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isBlocked, setIsBlocked] = useState(false);
   const [blockingDependencies, setBlockingDependencies] = useState<any[]>([]);
@@ -40,6 +41,7 @@ const AssignUsersModal: React.FC<AssignUsersModalProps> = ({
     if (isOpen) {
       loadUsers();
       validateDependencies();
+      setWarnings([]); // Limpar warnings ao abrir modal
       // Inicializar com usuários atualmente atribuídos e suas horas
       setSelectedUserIds(currentAssignees.map(u => u.id));
       // Inicializar horas de cada usuário com a sugestão do supervisor
@@ -52,6 +54,7 @@ const AssignUsersModal: React.FC<AssignUsersModalProps> = ({
       setUserDailyHours(initialHours);
     }
   }, [isOpen, currentAssignees, taskDailyHours]);
+
 
   const validateDependencies = async () => {
     try {
@@ -124,6 +127,9 @@ const AssignUsersModal: React.FC<AssignUsersModalProps> = ({
     try {
       setLoading(true);
       setError(null);
+      setWarnings([]);
+
+      let hasWarnings = false;
 
       // Preparar assignments com daily_hours para cada usuário
       const assignments = selectedUserIds.map(userId => ({
@@ -133,7 +139,16 @@ const AssignUsersModal: React.FC<AssignUsersModalProps> = ({
 
       // Atribuir usuários selecionados COM daily_hours
       if (assignments.length > 0) {
-        await tasksService.assignUsers(taskId, assignments);
+        const response = await tasksService.assignUsers(taskId, assignments);
+
+        // Capturar warnings da resposta
+        if (response.warnings && response.warnings.length > 0) {
+          setWarnings(response.warnings);
+          hasWarnings = true;
+        } else {
+          setWarnings([]);
+          hasWarnings = false;
+        }
       }
 
       // Remover usuários que foram deseleccionados
@@ -142,7 +157,17 @@ const AssignUsersModal: React.FC<AssignUsersModalProps> = ({
         await tasksService.unassignUser(taskId, user.id);
       }
 
+      // Sempre fechar o modal (com ou sem warnings)
       onSuccess();
+
+      // Se tem warnings, mostrar alerta visual antes de fechar
+      if (hasWarnings) {
+        const warningMessages = warnings.map(w => w.message).join('\n');
+        alert('⚠️ AVISO DE LIMITE DE HORAS\n\n' + warningMessages +
+              '\n\nA atribuição foi realizada, mas o usuário possui mais de 8h alocadas.\n' +
+              'O sistema bloqueará o cronômetro se as horas reais ultrapassarem 8h.');
+      }
+
       onClose();
     } catch (err: any) {
       const errorMsg = err.response?.data?.message || err.message || 'Erro ao atribuir usuários';
@@ -182,6 +207,7 @@ const AssignUsersModal: React.FC<AssignUsersModalProps> = ({
               <p className="text-red-700 text-sm">❌ {error}</p>
             </div>
           )}
+
 
           {/* Aviso de Tarefa Bloqueada */}
           {isBlocked && (
