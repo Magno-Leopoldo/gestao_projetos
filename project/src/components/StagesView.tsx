@@ -13,6 +13,8 @@ type SortBy = 'order' | 'name' | 'estimated_hours';
 interface StageFilters {
   search?: string;
   type?: 'all' | 'parallel' | 'sequential';
+  hasTasks?: 'all' | 'with' | 'without';
+  hoursRange?: 'all' | '0-10' | '10-50' | '50+';
 }
 
 const StagesView: React.FC = () => {
@@ -54,6 +56,31 @@ const StagesView: React.FC = () => {
       filtered = filtered.filter((stage) => {
         const isParallel = stage.is_parallel === true || stage.is_parallel === 1;
         return filters.type === 'parallel' ? isParallel : !isParallel;
+      });
+    }
+
+    // Filtrar por tarefas
+    if (filters.hasTasks && filters.hasTasks !== 'all') {
+      filtered = filtered.filter((stage: any) => {
+        const taskCount = Array.isArray(stage.tasks) ? stage.tasks.length : 0;
+        return filters.hasTasks === 'with' ? taskCount > 0 : taskCount === 0;
+      });
+    }
+
+    // Filtrar por faixa de horas
+    if (filters.hoursRange && filters.hoursRange !== 'all') {
+      filtered = filtered.filter((stage) => {
+        const hours = stage.estimated_hours || 0;
+        switch (filters.hoursRange) {
+          case '0-10':
+            return hours >= 0 && hours <= 10;
+          case '10-50':
+            return hours > 10 && hours <= 50;
+          case '50+':
+            return hours > 50;
+          default:
+            return true;
+        }
       });
     }
 
@@ -221,12 +248,12 @@ const StagesView: React.FC = () => {
           </div>
 
           {/* Filter and Sort Controls */}
-          <div className="flex gap-4 flex-wrap">
+          <div className="space-y-4">
             {/* Type Filter */}
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button
                 onClick={() => setFilters({ ...filters, type: 'all' })}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
                   filters.type === 'all'
                     ? 'bg-blue-600 text-white'
                     : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
@@ -236,7 +263,7 @@ const StagesView: React.FC = () => {
               </button>
               <button
                 onClick={() => setFilters({ ...filters, type: 'parallel' })}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
                   filters.type === 'parallel'
                     ? 'bg-blue-600 text-white'
                     : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
@@ -246,7 +273,7 @@ const StagesView: React.FC = () => {
               </button>
               <button
                 onClick={() => setFilters({ ...filters, type: 'sequential' })}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
                   filters.type === 'sequential'
                     ? 'bg-blue-600 text-white'
                     : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
@@ -256,16 +283,99 @@ const StagesView: React.FC = () => {
               </button>
             </div>
 
+            {/* Tasks Filter */}
+            <div className="flex gap-2 flex-wrap">
+              <span className="text-sm font-medium text-gray-600 px-2 py-2">Com Tarefas:</span>
+              <button
+                onClick={() => setFilters({ ...filters, hasTasks: 'all' })}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
+                  filters.hasTasks === 'all'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Todas
+              </button>
+              <button
+                onClick={() => setFilters({ ...filters, hasTasks: 'with' })}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
+                  filters.hasTasks === 'with'
+                    ? 'bg-green-600 text-white'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Com Tarefas
+              </button>
+              <button
+                onClick={() => setFilters({ ...filters, hasTasks: 'without' })}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
+                  filters.hasTasks === 'without'
+                    ? 'bg-orange-600 text-white'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Sem Tarefas
+              </button>
+            </div>
+
+            {/* Hours Range Filter */}
+            <div className="flex gap-2 flex-wrap">
+              <span className="text-sm font-medium text-gray-600 px-2 py-2">Horas Estimadas:</span>
+              <button
+                onClick={() => setFilters({ ...filters, hoursRange: 'all' })}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
+                  filters.hoursRange === 'all'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Todas
+              </button>
+              <button
+                onClick={() => setFilters({ ...filters, hoursRange: '0-10' })}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
+                  filters.hoursRange === '0-10'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                0-10h
+              </button>
+              <button
+                onClick={() => setFilters({ ...filters, hoursRange: '10-50' })}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
+                  filters.hoursRange === '10-50'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                10-50h
+              </button>
+              <button
+                onClick={() => setFilters({ ...filters, hoursRange: '50+' })}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
+                  filters.hoursRange === '50+'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                50h+
+              </button>
+            </div>
+
             {/* Sort Select */}
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortBy)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="order">Ordenar por: Ordem</option>
-              <option value="name">Ordenar por: Nome</option>
-              <option value="estimated_hours">Ordenar por: Horas estimadas</option>
-            </select>
+            <div className="flex gap-2 items-center">
+              <span className="text-sm font-medium text-gray-600">Ordenar por:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortBy)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              >
+                <option value="order">Ordem</option>
+                <option value="name">Nome</option>
+                <option value="estimated_hours">Horas estimadas</option>
+              </select>
+            </div>
           </div>
         </div>
 
