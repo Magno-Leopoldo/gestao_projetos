@@ -115,6 +115,13 @@ const ProjectsList: React.FC = () => {
     }
   };
 
+  const getButtonClass = (isActive: boolean) => {
+    if (isActive) {
+      return 'px-4 py-2 rounded-lg font-medium transition-colors bg-blue-600 text-white border border-blue-700 hover:bg-blue-700';
+    }
+    return 'px-4 py-2 rounded-lg font-medium transition-colors bg-white text-gray-700 border border-gray-300 hover:bg-gray-50';
+  };
+
   const navigateToStages = (projectId: number) => {
     navigate(`/projects/${projectId}/stages`);
   };
@@ -169,51 +176,31 @@ const ProjectsList: React.FC = () => {
           <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => handleStatusFilter(null)}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                !filters.status
-                  ? 'bg-blue-600 text-white border border-blue-700 hover:bg-blue-700'
-                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-              }`}
+              className={getButtonClass(!filters.status)}
             >
               Todos
             </button>
             <button
               onClick={() => handleStatusFilter('active')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                filters.status === 'active'
-                  ? 'bg-blue-600 text-white border border-blue-700 hover:bg-blue-700'
-                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-              }`}
+              className={getButtonClass(filters.status === 'active')}
             >
               Ativos
             </button>
             <button
               onClick={() => handleStatusFilter('completed')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                filters.status === 'completed'
-                  ? 'bg-blue-600 text-white border border-blue-700 hover:bg-blue-700'
-                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-              }`}
+              className={getButtonClass(filters.status === 'completed')}
             >
               Concluídos
             </button>
             <button
               onClick={() => handleStatusFilter('on_hold')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                filters.status === 'on_hold'
-                  ? 'bg-blue-600 text-white border border-blue-700 hover:bg-blue-700'
-                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-              }`}
+              className={getButtonClass(filters.status === 'on_hold')}
             >
               Em Espera
             </button>
             <button
               onClick={() => handleStatusFilter('cancelled')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                filters.status === 'cancelled'
-                  ? 'bg-blue-600 text-white border border-blue-700 hover:bg-blue-700'
-                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-              }`}
+              className={getButtonClass(filters.status === 'cancelled')}
             >
               Cancelados
             </button>
