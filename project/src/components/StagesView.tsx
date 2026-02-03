@@ -115,36 +115,33 @@ const StagesView: React.FC = () => {
       setProject(projectData);
 
       if (projectData.stages) {
-        let stagesWithTasks = projectData.stages;
+        // ✅ SEMPRE carregar tarefas de cada etapa (para filtros e display)
+        let stagesWithTasks = await Promise.all(
+          projectData.stages.map(async (stage: any) => {
+            try {
+              // Carregar tarefas dessa etapa
+              const tasksResult = await tasksService.getByStage(stage.id);
+              const tasks = Array.isArray(tasksResult) ? tasksResult : [];
 
-        // ✅ Se é user, carregar tarefas de cada etapa para poder filtrar corretamente
+              return {
+                ...stage,
+                tasks: tasks
+              };
+            } catch (err) {
+              console.warn(`Erro ao carregar tarefas da etapa ${stage.id}:`, err);
+              return {
+                ...stage,
+                tasks: []
+              };
+            }
+          })
+        );
+
+        // ✅ Se é usuário comum, filtrar apenas etapas com tarefas atribuídas a ele
         if (profile?.role === 'user' && user?.id) {
-          stagesWithTasks = await Promise.all(
-            projectData.stages.map(async (stage: any) => {
-              try {
-                // Carregar tarefas dessa etapa (que incluem assignees)
-                const tasksResult = await tasksService.getByStage(stage.id);
-                const tasks = Array.isArray(tasksResult) ? tasksResult : [];
-
-                return {
-                  ...stage,
-                  tasks: tasks
-                };
-              } catch (err) {
-                console.warn(`Erro ao carregar tarefas da etapa ${stage.id}:`, err);
-                return {
-                  ...stage,
-                  tasks: []
-                };
-              }
-            })
-          );
-
-          // Filtrar apenas etapas que têm tarefas onde o usuário está atribuído
           stagesWithTasks = stagesWithTasks.filter((stage: any) => {
             const tasks = Array.isArray(stage.tasks) ? stage.tasks : [];
             return tasks.some((task: any) => {
-              // ✅ CORRIGIDO: assignee_ids é uma string "7,8" ou null
               if (!task.assignee_ids) return false;
 
               const assigneeIds = task.assignee_ids
@@ -156,6 +153,7 @@ const StagesView: React.FC = () => {
             });
           });
         }
+        // ✅ Se é supervisor ou admin, mostra todas as etapas com suas tarefas
 
         setAllStages(stagesWithTasks);
       }
