@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Plus } from 'lucide-react';
 import { Project, ProjectStatus, User, RISK_STATUS_LABELS, RISK_STATUS_COLORS } from '../types';
 import { projectsService } from '../services/projectsService';
 import { usersService } from '../services/usersService';
 import { PROJECT_STATUS_LABELS } from '../types';
 import Layout from './Layout';
+import CreateProjectModal from './CreateProjectModal';
 
 interface ProjectFilters {
   status?: ProjectStatus;
   search?: string;
   supervisorId?: number;
-  startDateFrom?: string;
-  startDateTo?: string;
-  dueDateFrom?: string;
-  dueDateTo?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 const ProjectsList: React.FC = () => {
@@ -25,6 +25,7 @@ const ProjectsList: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<ProjectFilters>({});
   const [supervisors, setSupervisors] = useState<User[]>([]);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // ✅ Gerar ID visual composto
   const getDisplayId = (projectId: number): string => {
@@ -81,28 +82,23 @@ const ProjectsList: React.FC = () => {
       filtered = filtered.filter((project) => project.supervisor_id === filters.supervisorId);
     }
 
-    // Filtrar por data de início
-    if (filters.startDateFrom) {
-      filtered = filtered.filter(
-        (project) => project.start_date && new Date(project.start_date) >= new Date(filters.startDateFrom!)
-      );
-    }
-    if (filters.startDateTo) {
-      filtered = filtered.filter(
-        (project) => project.start_date && new Date(project.start_date) <= new Date(filters.startDateTo!)
-      );
+    // Filtrar por data (aplica em start_date e due_date)
+    if (filters.dateFrom) {
+      const fromDate = new Date(filters.dateFrom);
+      filtered = filtered.filter((project) => {
+        const startDate = project.start_date ? new Date(project.start_date) : null;
+        const dueDate = project.due_date ? new Date(project.due_date) : null;
+        return (startDate && startDate >= fromDate) || (dueDate && dueDate >= fromDate);
+      });
     }
 
-    // Filtrar por data de vencimento
-    if (filters.dueDateFrom) {
-      filtered = filtered.filter(
-        (project) => project.due_date && new Date(project.due_date) >= new Date(filters.dueDateFrom!)
-      );
-    }
-    if (filters.dueDateTo) {
-      filtered = filtered.filter(
-        (project) => project.due_date && new Date(project.due_date) <= new Date(filters.dueDateTo!)
-      );
+    if (filters.dateTo) {
+      const toDate = new Date(filters.dateTo);
+      filtered = filtered.filter((project) => {
+        const startDate = project.start_date ? new Date(project.start_date) : null;
+        const dueDate = project.due_date ? new Date(project.due_date) : null;
+        return (startDate && startDate <= toDate) || (dueDate && dueDate <= toDate);
+      });
     }
 
     setProjects(filtered);
@@ -134,9 +130,18 @@ const ProjectsList: React.FC = () => {
     <Layout currentPage={currentPage} onPageChange={setCurrentPage}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Projetos</h1>
-          <p className="text-gray-600">Gerenciar e acompanhar seus projetos</p>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Projetos</h1>
+            <p className="text-gray-600">Gerenciar e acompanhar seus projetos</p>
+          </div>
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors whitespace-nowrap"
+          >
+            <Plus className="w-5 h-5" />
+            <span>Novo Projeto</span>
+          </button>
         </div>
 
         {/* Filters */}
@@ -223,55 +228,27 @@ const ProjectsList: React.FC = () => {
             </select>
           </div>
 
-          {/* Date Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Start Date Filter */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Data de Início</label>
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <input
-                    type="date"
-                    placeholder="De"
-                    value={filters.startDateFrom || ''}
-                    onChange={(e) => setFilters({ ...filters, startDateFrom: e.target.value || undefined })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                  />
-                </div>
-                <div className="flex-1">
-                  <input
-                    type="date"
-                    placeholder="Até"
-                    value={filters.startDateTo || ''}
-                    onChange={(e) => setFilters({ ...filters, startDateTo: e.target.value || undefined })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                  />
-                </div>
+          {/* Date Range Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Range de Datas (Início/Vencimento)</label>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <input
+                  type="date"
+                  placeholder="De"
+                  value={filters.dateFrom || ''}
+                  onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value || undefined })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                />
               </div>
-            </div>
-
-            {/* Due Date Filter */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Data de Vencimento</label>
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <input
-                    type="date"
-                    placeholder="De"
-                    value={filters.dueDateFrom || ''}
-                    onChange={(e) => setFilters({ ...filters, dueDateFrom: e.target.value || undefined })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                  />
-                </div>
-                <div className="flex-1">
-                  <input
-                    type="date"
-                    placeholder="Até"
-                    value={filters.dueDateTo || ''}
-                    onChange={(e) => setFilters({ ...filters, dueDateTo: e.target.value || undefined })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                  />
-                </div>
+              <div className="flex-1">
+                <input
+                  type="date"
+                  placeholder="Até"
+                  value={filters.dateTo || ''}
+                  onChange={(e) => setFilters({ ...filters, dateTo: e.target.value || undefined })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                />
               </div>
             </div>
           </div>
@@ -388,6 +365,13 @@ const ProjectsList: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Modal para criar projeto */}
+      <CreateProjectModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={loadProjects}
+      />
     </Layout>
   );
 };
