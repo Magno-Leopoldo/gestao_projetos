@@ -1,7 +1,43 @@
 import { useEffect, useState } from 'react';
 import { dashboardService } from '../services/dashboardService';
-import { FolderOpen, AlertTriangle, Users, RefreshCw } from 'lucide-react';
+import { FolderOpen, AlertTriangle, Users, RefreshCw, TrendingUp, Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+
+type TeamMember = {
+  user_id: number;
+  user_name: string;
+  email: string;
+  allocated_hours: number;
+  hours_tracked_today: number;
+  active_sessions_today: number;
+  workload_percentage: number;
+  at_limit: boolean;
+};
+
+type TaskWithHours = {
+  id: number;
+  title: string;
+  stage_name?: string;
+  project_name?: string;
+  total_hours?: number;
+  collaborators?: number;
+  estimated_hours?: number;
+  progress_percent?: number;
+  due_date?: string;
+  days_overdue?: number;
+  status_risco?: string;
+};
+
+type TimeTrackingData = {
+  today_stats: {
+    total_sessions: number;
+    total_hours_completed: string;
+    active_sessions: number;
+    active_users: number;
+  };
+  top_tasks_by_hours: TaskWithHours[];
+  at_risk_tasks: TaskWithHours[];
+};
 
 type DashboardStats = {
   openProjects: number;
@@ -13,6 +49,7 @@ type DashboardStats = {
 };
 
 export default function Dashboard() {
+  const { profile } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({
     openProjects: 0,
     atRiskProjects: 0,
@@ -21,6 +58,8 @@ export default function Dashboard() {
     statusDistribution: [],
     recentTasks: [],
   });
+  const [teamWorkload, setTeamWorkload] = useState<TeamMember[]>([]);
+  const [timeTracking, setTimeTracking] = useState<TimeTrackingData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,6 +81,24 @@ export default function Dashboard() {
         })),
         recentTasks: data.recent_tasks || [],
       });
+
+      // Carregar dados de rastreamento de tempo
+      try {
+        const timeData = await dashboardService.getTimeTrackingStats();
+        setTimeTracking(timeData);
+      } catch (err) {
+        console.error('Error loading time tracking stats:', err);
+      }
+
+      // Carregar carga de trabalho da equipe (apenas para supervisor/admin)
+      if (profile?.role === 'supervisor' || profile?.role === 'admin') {
+        try {
+          const workloadData = await dashboardService.getTeamWorkload();
+          setTeamWorkload(workloadData);
+        } catch (err) {
+          console.error('Error loading team workload:', err);
+        }
+      }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
@@ -63,6 +120,27 @@ export default function Dashboard() {
     analise_tecnica: 'bg-purple-500',
     concluido: 'bg-green-500',
     refaca: 'bg-red-500',
+  };
+
+  const getRiscoStatusColor = (status: string) => {
+    if (status === 'CRITICO') return '🔴 CRITICO';
+    if (status === 'RISCO') return '🟠 RISCO';
+    if (status === 'NO_PRAZO') return '🟢 NO_PRAZO';
+    return '⚪ DESCONHECIDO';
+  };
+
+  const getWorkloadColor = (percentage: number) => {
+    if (percentage >= 100) return 'text-red-600 bg-red-50';
+    if (percentage >= 80) return 'text-orange-600 bg-orange-50';
+    if (percentage >= 60) return 'text-yellow-600 bg-yellow-50';
+    return 'text-green-600 bg-green-50';
+  };
+
+  const getWorkloadBarColor = (percentage: number) => {
+    if (percentage >= 100) return 'bg-red-500';
+    if (percentage >= 80) return 'bg-orange-500';
+    if (percentage >= 60) return 'bg-yellow-500';
+    return 'bg-green-500';
   };
 
   if (loading) {
@@ -130,7 +208,108 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* LINHA 2: Carga de Trabalho e Tarefas em Risco */}
+      {(profile?.role === 'supervisor' || profile?.role === 'admin') && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Carga de Trabalho da Equipe */}
+          <div className="bg-white rounded-lg shadow-lg hover:shadow-xl border border-gray-200 p-6 transition-shadow">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Users className="w-5 h-5 text-blue-600" />
+              Carga de Trabalho da Equipe
+            </h2>
+            <div className="space-y-4">
+              {teamWorkload.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">Nenhum membro da equipe encontrado</p>
+              ) : (
+                teamWorkload.map((member) => (
+                  <div key={member.user_id} className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700">{member.user_name}</span>
+                      <span className={`text-xs font-semibold px-2 py-1 rounded ${getWorkloadColor(member.workload_percentage)}`}>
+                        {member.workload_percentage.toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div
+                        className={`${getWorkloadBarColor(member.workload_percentage)} h-2.5 rounded-full transition-all`}
+                        style={{ width: `${Math.min(member.workload_percentage, 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>{member.allocated_hours.toFixed(1)}h / 8h</span>
+                      {member.at_limit && <span className="text-red-600 font-semibold">🔴 NO LIMITE</span>}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Tarefas em Risco */}
+          <div className="bg-white rounded-lg shadow-lg hover:shadow-xl border border-gray-200 p-6 transition-shadow">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-orange-600" />
+              Tarefas em Risco
+            </h2>
+            <div className="space-y-3">
+              {!timeTracking || timeTracking.at_risk_tasks.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">Nenhuma tarefa em risco</p>
+              ) : (
+                timeTracking.at_risk_tasks.map((task) => (
+                  <div key={task.id} className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900">{task.title}</p>
+                        <p className="text-xs text-gray-500">{task.project_name}</p>
+                      </div>
+                      <span className="text-xs font-semibold whitespace-nowrap">
+                        {getRiscoStatusColor(task.status_risco || 'DESCONHECIDO')}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      Prazo: {task.days_overdue ? `${task.days_overdue} dias atrás` : 'Sem prazo'}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LINHA 3: Horas Rastreadas e Distribuição de Status */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Horas Rastreadas */}
+        {timeTracking && (
+          <div className="bg-white rounded-lg shadow-lg hover:shadow-xl border border-gray-200 p-6 transition-shadow">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-blue-600" />
+              Horas Rastreadas (Hoje)
+            </h2>
+            <div className="space-y-4">
+              <div className="text-center py-4">
+                <p className="text-3xl font-bold text-blue-600">{timeTracking.today_stats.total_hours_completed}h</p>
+                <p className="text-sm text-gray-600 mt-1">Total rastreado</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gray-900">{timeTracking.today_stats.total_sessions}</p>
+                  <p className="text-xs text-gray-600">Sessões</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-orange-600">{timeTracking.today_stats.active_sessions}</p>
+                  <p className="text-xs text-gray-600">Ativas/Pausadas</p>
+                </div>
+              </div>
+              <div className="text-center py-2 bg-blue-50 rounded">
+                <p className="text-sm text-blue-900">
+                  <strong>{timeTracking.today_stats.active_users}</strong> usuário(s) trabalhando
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Distribuição de Status</h2>
           <div className="space-y-3">
@@ -157,6 +336,42 @@ export default function Dashboard() {
             })}
           </div>
         </div>
+
+        {/* Top Tarefas por Horas Rastreadas */}
+        {timeTracking && (
+          <div className="bg-white rounded-lg shadow-lg hover:shadow-xl border border-gray-200 p-6 transition-shadow">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-green-600" />
+              Top Tarefas (Horas Rastreadas)
+            </h2>
+            <div className="space-y-3">
+              {timeTracking.top_tasks_by_hours.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">Nenhuma tarefa rastreada</p>
+              ) : (
+                timeTracking.top_tasks_by_hours.slice(0, 5).map((task, index) => (
+                  <div key={task.id} className="p-3 border border-gray-200 rounded-lg">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {index + 1}. {task.title}
+                        </p>
+                        <p className="text-xs text-gray-500">{task.project_name}</p>
+                      </div>
+                      <span className="text-sm font-bold text-blue-600 whitespace-nowrap ml-2">
+                        {parseFloat(task.total_hours || '0').toFixed(1)}h
+                      </span>
+                    </div>
+                    {task.estimated_hours && task.progress_percent !== undefined && (
+                      <div className="text-xs text-gray-600">
+                        {parseFloat(task.progress_percent).toFixed(0)}% do estimado ({parseFloat(task.total_hours || '0').toFixed(1)}h / {parseFloat(task.estimated_hours).toFixed(1)}h)
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Tarefas Recentes</h2>

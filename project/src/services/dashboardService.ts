@@ -20,4 +20,16 @@ export const dashboardService = {
     const response = await apiClient.get('/dashboard/my-hours');
     return response.data.data;
   },
+
+  // Obter estatísticas de rastreamento de tempo
+  async getTimeTrackingStats() {
+    const response = await apiClient.get('/dashboard/time-tracking-stats');
+    return response.data.data;
+  },
+
+  // Obter carga de trabalho da equipe
+  async getTeamWorkload() {
+    const response = await apiClient.get('/dashboard/team-workload');
+    return response.data.data;
+  },
 };
