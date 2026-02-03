@@ -38,6 +38,17 @@ const StagesView: React.FC = () => {
     applyFiltersAndSort();
   }, [filters, sortBy, allStages]);
 
+  // Debug: Verificar se as tarefas estão sendo carregadas
+  useEffect(() => {
+    console.group('🔍 DEBUG: Etapas Carregadas');
+    console.log('Total de etapas:', allStages.length);
+    allStages.forEach((stage: any) => {
+      const taskCount = Array.isArray(stage.tasks) ? stage.tasks.length : 0;
+      console.log(`✓ "${stage.name}" → ${taskCount} tarefas`, stage.tasks);
+    });
+    console.groupEnd();
+  }, [allStages]);
+
   const applyFiltersAndSort = () => {
     let filtered = [...allStages];
 
@@ -121,7 +132,8 @@ const StagesView: React.FC = () => {
             try {
               // Carregar tarefas dessa etapa
               const tasksResult = await tasksService.getByStage(stage.id);
-              const tasks = Array.isArray(tasksResult) ? tasksResult : [];
+              // tasksResult tem a estrutura: { data: [...], pagination: {...} }
+              const tasks = Array.isArray(tasksResult?.data) ? tasksResult.data : [];
 
               return {
                 ...stage,
