@@ -94,7 +94,14 @@ const UpdateProjectStatusModal: React.FC<UpdateProjectStatusModalProps> = ({
 
             <div className="space-y-2">
               {STATUS_OPTIONS.map((option) => (
-                <label key={option.value} className="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                <label
+                  key={option.value}
+                  className={`flex items-center p-3 border rounded-lg cursor-pointer transition-colors ${
+                    newStatus === option.value
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
                   <input
                     type="radio"
                     name="status"
