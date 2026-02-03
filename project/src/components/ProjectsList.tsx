@@ -7,6 +7,7 @@ import { usersService } from '../services/usersService';
 import { PROJECT_STATUS_LABELS } from '../types';
 import Layout from './Layout';
 import CreateProjectModal from './CreateProjectModal';
+import UpdateProjectStatusModal from './UpdateProjectStatusModal';
 
 interface ProjectFilters {
   status?: ProjectStatus;
@@ -26,6 +27,8 @@ const ProjectsList: React.FC = () => {
   const [filters, setFilters] = useState<ProjectFilters>({});
   const [supervisors, setSupervisors] = useState<User[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
   // ✅ Gerar ID visual composto
   const getDisplayId = (projectId: number): string => {
@@ -114,6 +117,11 @@ const ProjectsList: React.FC = () => {
 
   const navigateToStages = (projectId: number) => {
     navigate(`/projects/${projectId}/stages`);
+  };
+
+  const handleOpenStatusModal = (project: Project) => {
+    setSelectedProject(project);
+    setStatusModalOpen(true);
   };
 
   const getStatusBadgeColor = (status: ProjectStatus) => {
@@ -287,13 +295,15 @@ const ProjectsList: React.FC = () => {
                 <div className="p-6">
                   <div className="flex items-start justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-900 flex-1">{project.name}</h3>
-                    <span
-                      className={`ml-2 px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getStatusBadgeColor(
+                    <button
+                      onClick={() => handleOpenStatusModal(project)}
+                      className={`ml-2 px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap cursor-pointer hover:opacity-80 transition-opacity ${getStatusBadgeColor(
                         project.status
                       )}`}
+                      title="Clique para alterar o status"
                     >
                       {PROJECT_STATUS_LABELS[project.status]}
-                    </span>
+                    </button>
                   </div>
 
                   {/* Description */}
@@ -372,6 +382,18 @@ const ProjectsList: React.FC = () => {
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={loadProjects}
       />
+
+      {/* Modal para alterar status */}
+      {selectedProject && (
+        <UpdateProjectStatusModal
+          projectId={selectedProject.id}
+          projectName={selectedProject.name}
+          currentStatus={selectedProject.status}
+          isOpen={statusModalOpen}
+          onClose={() => setStatusModalOpen(false)}
+          onSuccess={loadProjects}
+        />
+      )}
     </Layout>
   );
 };
