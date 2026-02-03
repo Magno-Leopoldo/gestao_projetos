@@ -1,22 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Project, ProjectStatus, RISK_STATUS_LABELS, RISK_STATUS_COLORS } from '../types';
+import { Project, ProjectStatus, User, RISK_STATUS_LABELS, RISK_STATUS_COLORS } from '../types';
 import { projectsService } from '../services/projectsService';
+import { usersService } from '../services/usersService';
 import { PROJECT_STATUS_LABELS } from '../types';
 import Layout from './Layout';
 
 interface ProjectFilters {
   status?: ProjectStatus;
   search?: string;
+  supervisorId?: number;
+  startDateFrom?: string;
+  startDateTo?: string;
+  dueDateFrom?: string;
+  dueDateTo?: string;
 }
 
 const ProjectsList: React.FC = () => {
   const navigate = useNavigate();
   const [currentPage, setCurrentPage] = useState<'dashboard' | 'kanban' | 'projects' | 'monitoring'>('projects');
   const [projects, setProjects] = useState<Project[]>([]);
+  const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<ProjectFilters>({});
+  const [supervisors, setSupervisors] = useState<User[]>([]);
 
   // ✅ Gerar ID visual composto
   const getDisplayId = (projectId: number): string => {
@@ -24,8 +32,24 @@ const ProjectsList: React.FC = () => {
   };
 
   useEffect(() => {
+    loadSupervisors();
     loadProjects();
-  }, [filters]);
+  }, []);
+
+  useEffect(() => {
+    applyFilters();
+  }, [filters, allProjects]);
+
+  const loadSupervisors = async () => {
+    try {
+      const users = await usersService.getAll();
+      // Filtrar apenas supervisores e admins
+      const supervisorList = users.filter((u: User) => u.role === 'supervisor' || u.role === 'admin');
+      setSupervisors(supervisorList);
+    } catch (err) {
+      console.error('Erro ao carregar supervisores:', err);
+    }
+  };
 
   const loadProjects = async () => {
     setLoading(true);
@@ -39,7 +63,7 @@ const ProjectsList: React.FC = () => {
         params.search = filters.search;
       }
       const result = await projectsService.getAll(params);
-      setProjects(result || []);
+      setAllProjects(result || []);
     } catch (err: any) {
       const errorMsg = err.response?.data?.message || err.message || 'Erro ao carregar projetos';
       setError(errorMsg);
@@ -47,6 +71,41 @@ const ProjectsList: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const applyFilters = () => {
+    let filtered = [...allProjects];
+
+    // Filtrar por supervisor
+    if (filters.supervisorId) {
+      filtered = filtered.filter((project) => project.supervisor_id === filters.supervisorId);
+    }
+
+    // Filtrar por data de início
+    if (filters.startDateFrom) {
+      filtered = filtered.filter(
+        (project) => project.start_date && new Date(project.start_date) >= new Date(filters.startDateFrom!)
+      );
+    }
+    if (filters.startDateTo) {
+      filtered = filtered.filter(
+        (project) => project.start_date && new Date(project.start_date) <= new Date(filters.startDateTo!)
+      );
+    }
+
+    // Filtrar por data de vencimento
+    if (filters.dueDateFrom) {
+      filtered = filtered.filter(
+        (project) => project.due_date && new Date(project.due_date) >= new Date(filters.dueDateFrom!)
+      );
+    }
+    if (filters.dueDateTo) {
+      filtered = filtered.filter(
+        (project) => project.due_date && new Date(project.due_date) <= new Date(filters.dueDateTo!)
+      );
+    }
+
+    setProjects(filtered);
   };
 
   const handleStatusFilter = (status: ProjectStatus | null) => {
@@ -145,6 +204,76 @@ const ProjectsList: React.FC = () => {
             >
               Cancelados
             </button>
+          </div>
+
+          {/* Supervisor Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Supervisor</label>
+            <select
+              value={filters.supervisorId || ''}
+              onChange={(e) => setFilters({ ...filters, supervisorId: e.target.value ? parseInt(e.target.value) : undefined })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">Todos os supervisores</option>
+              {supervisors.map((supervisor) => (
+                <option key={supervisor.id} value={supervisor.id}>
+                  {supervisor.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date Filters */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Start Date Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Data de Início</label>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <input
+                    type="date"
+                    placeholder="De"
+                    value={filters.startDateFrom || ''}
+                    onChange={(e) => setFilters({ ...filters, startDateFrom: e.target.value || undefined })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                </div>
+                <div className="flex-1">
+                  <input
+                    type="date"
+                    placeholder="Até"
+                    value={filters.startDateTo || ''}
+                    onChange={(e) => setFilters({ ...filters, startDateTo: e.target.value || undefined })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Due Date Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Data de Vencimento</label>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <input
+                    type="date"
+                    placeholder="De"
+                    value={filters.dueDateFrom || ''}
+                    onChange={(e) => setFilters({ ...filters, dueDateFrom: e.target.value || undefined })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                </div>
+                <div className="flex-1">
+                  <input
+                    type="date"
+                    placeholder="Até"
+                    value={filters.dueDateTo || ''}
+                    onChange={(e) => setFilters({ ...filters, dueDateTo: e.target.value || undefined })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
