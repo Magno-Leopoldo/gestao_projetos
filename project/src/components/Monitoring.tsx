@@ -2013,11 +2013,6 @@ export default function Monitoring() {
             </div>
           </div>
         </div>
-
-        {/* Fim do Monitoramento */}
-        <div className="text-center py-8 text-gray-600 text-sm">
-          <p>✅ Todas as 9 seções de monitoramento foram carregadas</p>
-        </div>
       </div>
     </div>
   );
