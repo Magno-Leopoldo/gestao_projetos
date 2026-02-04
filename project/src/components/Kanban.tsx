@@ -169,26 +169,27 @@ export default function Kanban() {
         <p className="text-gray-600 mt-1">Visualize e gerencie o fluxo de projetos</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        {columns.map((column) => {
-          const columnProjects = getProjectsByKanbanStatus(column.kanban_status);
+      <div className="overflow-x-auto pb-4">
+        <div className="flex gap-4 min-w-max">
+          {columns.map((column) => {
+            const columnProjects = getProjectsByKanbanStatus(column.kanban_status);
 
-          return (
-            <div
-              key={column.id}
-              onDrop={() => handleDrop(column.kanban_status)}
-              onDragOver={handleDragOver}
-              className={`${column.color} rounded-xl border-2 p-4 min-h-[600px]`}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-gray-900">{column.title}</h2>
-                <span className="bg-white text-gray-700 text-sm font-medium px-2.5 py-0.5 rounded-full">
-                  {columnProjects.length}
-                </span>
-              </div>
+            return (
+              <div
+                key={column.id}
+                onDrop={() => handleDrop(column.kanban_status)}
+                onDragOver={handleDragOver}
+                className={`${column.color} rounded-xl border-2 p-4 w-80 flex-shrink-0`}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-semibold text-gray-900">{column.title}</h2>
+                  <span className="bg-white text-gray-700 text-sm font-medium px-2.5 py-0.5 rounded-full">
+                    {columnProjects.length}
+                  </span>
+                </div>
 
-              <div className="space-y-3">
-                {columnProjects.map((project) => (
+                <div className="space-y-3 overflow-y-auto max-h-[calc(100vh-200px)] pr-2">
+                  {columnProjects.map((project) => (
                   <div
                     key={project.id}
                     draggable
@@ -252,10 +253,11 @@ export default function Kanban() {
                     </div>
                   </div>
                 ))}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );
