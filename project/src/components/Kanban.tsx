@@ -188,11 +188,11 @@ export default function Kanban() {
       </div>
 
       {/* Kanban Board */}
-      <div className="overflow-x-auto">
-        <div className="px-3 py-4 sm:px-6 md:px-8 md:py-8">
+      <div className="flex-1 overflow-hidden">
+        <div className="px-3 py-4 sm:px-6 md:px-8 md:py-8 h-full flex flex-col">
           {/* Desktop View */}
-          <div className="hidden lg:block">
-            <div className="flex gap-4 xl:gap-6 min-w-max">
+          <div className="hidden lg:flex flex-1 overflow-hidden">
+            <div className="flex gap-4 xl:gap-6 w-full">
               {columns.map((column) => {
                 const columnProjects = getProjectsByKanbanStatus(column.kanban_status);
 
@@ -201,7 +201,7 @@ export default function Kanban() {
                     key={column.id}
                     onDrop={() => handleDrop(column.kanban_status)}
                     onDragOver={handleDragOver}
-                    className={`${column.color} rounded-2xl border border-opacity-50 backdrop-blur-sm p-5 w-80 xl:w-96 flex-shrink-0 flex flex-col bg-opacity-60 shadow-sm hover:shadow-md transition-shadow`}
+                    className={`${column.color} rounded-2xl border border-opacity-50 backdrop-blur-sm p-5 flex-1 flex flex-col bg-opacity-60 shadow-sm hover:shadow-md transition-shadow min-w-0`}
                   >
                     {/* Column Header */}
                     <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 border-opacity-50">
