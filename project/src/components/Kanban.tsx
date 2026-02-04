@@ -21,11 +21,11 @@ type KanbanColumn = {
 };
 
 const columns: KanbanColumn[] = [
-  { id: '1', title: 'Novo', kanban_status: 'novo', color: 'bg-blue-50 border-blue-200' },
-  { id: '2', title: 'Em Desenvolvimento', kanban_status: 'em_desenvolvimento', color: 'bg-yellow-50 border-yellow-200' },
-  { id: '3', title: 'Análise Técnica', kanban_status: 'analise_tecnica', color: 'bg-purple-50 border-purple-200' },
-  { id: '4', title: 'Concluído', kanban_status: 'concluido', color: 'bg-green-50 border-green-200' },
-  { id: '5', title: 'Refaça', kanban_status: 'refaca', color: 'bg-red-50 border-red-300 ring-2 ring-red-500 ring-opacity-30' },
+  { id: '1', title: 'Novo', kanban_status: 'novo', color: 'bg-gradient-to-b from-blue-50 to-blue-100 border-blue-300' },
+  { id: '2', title: 'Em Desenvolvimento', kanban_status: 'em_desenvolvimento', color: 'bg-gradient-to-b from-yellow-50 to-yellow-100 border-yellow-300' },
+  { id: '3', title: 'Análise Técnica', kanban_status: 'analise_tecnica', color: 'bg-gradient-to-b from-purple-50 to-purple-100 border-purple-300' },
+  { id: '4', title: 'Concluído', kanban_status: 'concluido', color: 'bg-gradient-to-b from-green-50 to-green-100 border-green-300' },
+  { id: '5', title: 'Refaça', kanban_status: 'refaca', color: 'bg-gradient-to-b from-red-50 to-red-100 border-red-400 ring-2 ring-red-500 ring-opacity-30' },
 ];
 
 export default function Kanban() {
