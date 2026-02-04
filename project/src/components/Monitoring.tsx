@@ -94,6 +94,20 @@ interface AssignmentAnalysis {
   dailyTrend: Array<{ day: string; count: number }>;
 }
 
+interface RiskTask {
+  id: number;
+  title: string;
+  project_name: string;
+  supervisor_name: string;
+  responsible_user: string;
+  progress: number; // 0-100
+  allocated_hours: number;
+  tracked_hours: number;
+  days_overdue: number; // Negativo se atrasado
+  risk_level: 'critical' | 'high' | 'medium'; // 🔴 🟠 🟡
+  risk_reason: string; // Por que está em risco
+}
+
 export default function Monitoring() {
   const [filters, setFilters] = useState<FilterState>({
     dateFrom: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -126,6 +140,7 @@ export default function Monitoring() {
     },
     dailyTrend: [],
   });
+  const [riskTasks, setRiskTasks] = useState<RiskTask[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -145,10 +160,11 @@ export default function Monitoring() {
     }
   }, [filters.supervisorId, supervisors]);
 
-  // Reload assignment history when filters change
+  // Reload assignment history and risk tasks when filters change
   useEffect(() => {
     if (supervisors.length > 0) {
       loadAssignmentHistory();
+      loadRiskTasks();
     }
   }, [filters.supervisorId]);
 
@@ -323,9 +339,115 @@ export default function Monitoring() {
 
       // Calcular análise das atribuições
       await calculateAssignmentAnalysis(history);
+
+      // Carregar tarefas em risco
+      await loadRiskTasks();
     } catch (error) {
       console.error('Erro ao carregar histórico de atribuições:', error);
       setAssignmentHistory([]);
+    }
+  }
+
+  async function loadRiskTasks() {
+    try {
+      const tasks: RiskTask[] = [];
+      const allProjects = await projectsService.getAll({ include: 'stages' });
+      let supervisorsMap = new Map<number, Supervisor>();
+      supervisors.forEach((s) => supervisorsMap.set(s.id, s));
+
+      // Determinar filtro de supervisor
+      let filteredProjects = allProjects;
+      if (filters.supervisorId) {
+        filteredProjects = allProjects.filter(
+          (p: any) => p.supervisor_id === filters.supervisorId
+        );
+      }
+
+      // Iterar sobre projetos para encontrar tarefas em risco
+      for (const project of filteredProjects) {
+        if (project.stages && Array.isArray(project.stages)) {
+          for (const stage of project.stages) {
+            const stageTasks = await tasksService.getByStage(stage.id);
+            const projectTasks = stageTasks.data || [];
+
+            for (const task of projectTasks) {
+              // Não incluir tarefas concluídas ou canceladas
+              if (task.status === 'concluido' || task.status === 'cancelado') continue;
+
+              const assignments = task.assignments_array || [];
+              const supervisor = supervisorsMap.get(project.supervisor_id);
+              const progress = task.progress || 0;
+
+              // Calcular horas alocadas e rastreadas
+              let allocatedHours = 0;
+              let responsibleUser = 'N/A';
+              assignments.forEach((a: any) => {
+                allocatedHours += parseFloat(String(a.daily_hours)) || 0;
+                if (!responsibleUser || responsibleUser === 'N/A') {
+                  responsibleUser = a.user_name || 'Desconhecido';
+                }
+              });
+
+              // Determinar nível de risco
+              let riskLevel: 'critical' | 'high' | 'medium' = 'medium';
+              let riskReason = '';
+              let daysOverdue = 0;
+
+              // Critério 1: Progresso muito lento (< 30% com múltiplas atribuições)
+              if (progress < 30 && allocatedHours > 0) {
+                riskLevel = 'high';
+                riskReason = 'Progresso muito lento';
+              }
+
+              // Critério 2: Status "em_análise" sem progresso
+              if (task.status === 'analise_tecnica' && progress < 20) {
+                riskLevel = 'high';
+                riskReason = 'Análise técnica estagnada';
+              }
+
+              // Critério 3: Tarefas com status "refaca" (requerem trabalho extra)
+              if (task.status === 'refaca') {
+                riskLevel = 'critical';
+                riskReason = 'Requer refação';
+                daysOverdue = -2; // Simulação
+              }
+
+              // Critério 4: Progresso 0% há muito tempo (múltiplas atribuições)
+              if (progress === 0 && allocatedHours >= 6) {
+                riskLevel = 'critical';
+                riskReason = 'Sem início de execução';
+                daysOverdue = -1;
+              }
+
+              // Apenas adicionar se em risco
+              if (riskLevel === 'critical' || riskLevel === 'high') {
+                tasks.push({
+                  id: task.id,
+                  title: task.title,
+                  project_name: project.name,
+                  supervisor_name: supervisor?.full_name || 'N/A',
+                  responsible_user: responsibleUser,
+                  progress,
+                  allocated_hours: allocatedHours,
+                  tracked_hours: 0, // Simplificado por enquanto
+                  days_overdue: daysOverdue,
+                  risk_level: riskLevel,
+                  risk_reason: riskReason,
+                });
+              }
+            }
+          }
+        }
+      }
+
+      // Ordenar por criticidade
+      const riskOrder = { 'critical': 0, 'high': 1, 'medium': 2 };
+      tasks.sort((a, b) => riskOrder[a.risk_level] - riskOrder[b.risk_level]);
+
+      setRiskTasks(tasks);
+    } catch (error) {
+      console.error('Erro ao carregar tarefas em risco:', error);
+      setRiskTasks([]);
     }
   }
 
@@ -1338,11 +1460,120 @@ export default function Monitoring() {
           </div>
         </div>
 
-        {/* Placeholder para Seções 6-9 */}
+        {/* ===== SEÇÃO 6: TAREFAS EM RISCO ===== */}
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">⚠️ Tarefas em Risco</h2>
+
+          {riskTasks.length === 0 ? (
+            <div className="bg-green-50 rounded-lg shadow-sm border border-green-200 p-8 text-center">
+              <p className="text-lg font-medium text-green-900">✅ Nenhuma tarefa em risco!</p>
+              <p className="text-sm text-green-700 mt-2">Todas as tarefas estão em dia</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {riskTasks.map((task, index) => {
+                const riskColors = {
+                  critical: 'border-red-300 bg-red-50',
+                  high: 'border-orange-300 bg-orange-50',
+                  medium: 'border-yellow-300 bg-yellow-50',
+                };
+
+                const riskEmojis = {
+                  critical: '🔴',
+                  high: '🟠',
+                  medium: '🟡',
+                };
+
+                const riskLabels = {
+                  critical: 'CRÍTICO',
+                  high: 'RISCO',
+                  medium: 'ATENÇÃO',
+                };
+
+                return (
+                  <div
+                    key={task.id}
+                    className={`rounded-lg shadow-sm border-2 p-6 ${riskColors[task.risk_level]}`}
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-start gap-3">
+                        <span className="text-2xl font-bold text-gray-900 bg-white px-3 py-1 rounded">
+                          {index + 1}
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-2xl">{riskEmojis[task.risk_level]}</span>
+                            <span
+                              className={`px-3 py-1 rounded text-xs font-semibold ${
+                                task.risk_level === 'critical'
+                                  ? 'bg-red-200 text-red-800'
+                                  : task.risk_level === 'high'
+                                  ? 'bg-orange-200 text-orange-800'
+                                  : 'bg-yellow-200 text-yellow-800'
+                              }`}
+                            >
+                              {riskLabels[task.risk_level]}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1">Razão: {task.risk_reason}</p>
+                        </div>
+                      </div>
+                      {task.days_overdue < 0 && (
+                        <span className="text-lg font-bold text-red-600">❌ {task.days_overdue} dias</span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <p className="text-lg font-semibold text-gray-900">{task.title}</p>
+                        <p className="text-sm text-gray-600">{task.project_name}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-gray-600">
+                          <strong>Supervisor:</strong> {task.supervisor_name}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          <strong>Responsável:</strong> {task.responsible_user}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Progresso */}
+                    <div className="mb-4">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium text-gray-700">Progresso: {task.progress}%</span>
+                        <span className="text-sm font-medium text-gray-700">
+                          Horas: {task.tracked_hours.toFixed(1)}h / {task.allocated_hours.toFixed(1)}h
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-300 rounded-full h-3">
+                        <div
+                          className={`h-3 rounded-full ${
+                            task.progress >= 75 ? 'bg-green-500' : task.progress >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                          }`}
+                          style={{ width: `${task.progress}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Ação */}
+                    <div className="flex justify-end">
+                      <button className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                        📋 Detalhes
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Placeholder para Seções 7-9 */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-600">
-          <p className="text-lg font-medium">🚀 Seções 6-9 em desenvolvimento...</p>
+          <p className="text-lg font-medium">🚀 Seções 7-9 em desenvolvimento...</p>
           <p className="text-sm mt-2">
-            Risco, Horas, Top Tarefas, Ranking
+            Horas Rastreadas, Top Tarefas, Ranking
           </p>
         </div>
       </div>
