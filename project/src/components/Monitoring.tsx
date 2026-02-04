@@ -1,65 +1,350 @@
 import { useEffect, useState } from 'react';
-import { Profile } from '../lib/supabase';
-import { TrendingUp, TrendingDown, Award, AlertTriangle, User } from 'lucide-react';
+import { Calendar, Users, Filter, ChevronDown, Star, AlertCircle } from 'lucide-react';
+import { TaskStatus, STATUS_LABELS } from '../types';
 import { usersService } from '../services/usersService';
 import { projectsService } from '../services/projectsService';
 import { tasksService } from '../services/tasksService';
+import { timeEntriesService } from '../services/timeEntriesService';
 
-type UserPerformance = {
-  user: Profile;
-  totalTasks: number;
-  completedTasks: number;
-  inProgressTasks: number;
-  refacaTasks: number;
-  totalHours: number;
-  completionRate: number;
-};
+interface Supervisor {
+  id: number;
+  full_name: string;
+  email: string;
+  role: string;
+}
 
-type SupervisorPerformance = {
-  supervisor: Profile;
+interface SupervisorPerformance {
+  supervisor: Supervisor;
   totalProjects: number;
   activeProjects: number;
   totalTasks: number;
   completedTasks: number;
+  refacaTasks: number;
   completionRate: number;
-};
+  rating: number; // 1-5 stars
+  teamSize: number;
+  avgHours: number;
+  status: 'excelente' | 'bom' | 'atencao';
+}
+
+interface FilterState {
+  dateFrom: string;
+  dateTo: string;
+  periodPreset: 'today' | '7days' | '30days' | 'custom';
+  supervisorId: number | null;
+  statusFilters: TaskStatus[];
+}
+
+interface TeamMemberWorkload {
+  user_id: number;
+  user_name: string;
+  supervisor_id: number;
+  supervisor_name: string;
+  allocated_hours: number;  // Sum of daily_hours from assignments
+  tracked_hours: number;    // Sum from time entries
+  active_projects: number;
+  completion_rate: number;  // % of completed tasks
+  member_since_days: number; // Days in the team
+  status: 'no_limite' | 'atencao' | 'ok'; // Based on allocated vs limit
+}
 
 export default function Monitoring() {
-  const [userPerformance, setUserPerformance] = useState<UserPerformance[]>([]);
-  const [supervisorPerformance, setSupervisorPerformance] = useState<SupervisorPerformance[]>([]);
+  const [filters, setFilters] = useState<FilterState>({
+    dateFrom: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    dateTo: new Date().toISOString().split('T')[0],
+    periodPreset: '7days',
+    supervisorId: null,
+    statusFilters: ['novo', 'em_desenvolvimento', 'analise_tecnica', 'concluido', 'refaca'],
+  });
+
+  const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
+  const [supervisorsPerformance, setSupervisorsPerformance] = useState<SupervisorPerformance[]>([]);
+  const [teamMembersWorkload, setTeamMembersWorkload] = useState<TeamMemberWorkload[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadMonitoringData();
   }, []);
 
+  // Reload team members workload when supervisor filter changes
+  useEffect(() => {
+    if (supervisors.length > 0) {
+      const filteredSupervisors = filters.supervisorId
+        ? supervisors.filter((s) => s.id === filters.supervisorId)
+        : supervisors;
+
+      if (filteredSupervisors.length > 0) {
+        loadTeamMembersWorkload(filteredSupervisors);
+      }
+    }
+  }, [filters.supervisorId, supervisors]);
+
   async function loadMonitoringData() {
     try {
-      // TODO: Backend precisa implementar endpoints de performance
-      // GET /api/users/performance - retorna dados de performance dos usuários
-      // GET /api/users/supervisors-performance - retorna dados de performance dos supervisores
+      // Carregar supervisores
+      const allUsers = await usersService.getAll();
+      const supervisorsList = allUsers.filter(
+        (user: any) => user.role === 'supervisor' || user.role === 'admin'
+      );
+      setSupervisors(supervisorsList);
 
-      // Por enquanto, vamos usar dados mock para não quebrar a interface
-      // Quando os endpoints estiverem prontos, descomentar o código abaixo:
+      // Carregar dados de performance para cada supervisor
+      const performanceData: SupervisorPerformance[] = [];
 
-      /*
-      const usersPerf = await usersService.getUsersPerformance();
-      setUserPerformance(usersPerf.data);
+      for (const supervisor of supervisorsList) {
+        try {
+          // Carregar projetos do supervisor (com stages incluídos)
+          const projects = await projectsService.getAll({ include: 'stages' });
+          const supervisorProjects = projects.filter(
+            (p: any) => p.supervisor_id === supervisor.id
+          );
 
-      const supervisorsPerf = await usersService.getSupervisorsPerformance();
-      setSupervisorPerformance(supervisorsPerf.data);
-      */
+          let totalTasks = 0;
+          let completedTasks = 0;
+          let refacaTasks = 0;
+          let teamMembers = new Set<number>();
 
-      // Dados mock temporários
-      setUserPerformance([]);
-      setSupervisorPerformance([]);
+          // Para cada projeto, carregar tarefas e calcular métricas
+          for (const project of supervisorProjects) {
+            if (project.stages && Array.isArray(project.stages)) {
+              for (const stage of project.stages) {
+                const stageTasks = await tasksService.getByStage(stage.id);
+                const tasks = stageTasks.data || [];
 
+                totalTasks += tasks.length;
+                completedTasks += tasks.filter((t: any) => t.status === 'concluido').length;
+                refacaTasks += tasks.filter((t: any) => t.status === 'refaca').length;
+
+                // Contar membros únicos da equipe
+                tasks.forEach((task: any) => {
+                  if (task.assignees_array) {
+                    task.assignees_array.forEach((assignee: any) => {
+                      teamMembers.add(assignee.id);
+                    });
+                  }
+                });
+              }
+            }
+          }
+
+          const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+          const rating = Math.ceil((completionRate / 20)); // 1-5 stars based on percentage
+
+          // Determinar status baseado em completionRate
+          let status: 'excelente' | 'bom' | 'atencao' = 'atencao';
+          if (completionRate >= 80) status = 'excelente';
+          else if (completionRate >= 60) status = 'bom';
+
+          performanceData.push({
+            supervisor,
+            totalProjects: supervisorProjects.length,
+            activeProjects: supervisorProjects.filter((p: any) => p.status === 'active').length,
+            totalTasks,
+            completedTasks,
+            refacaTasks,
+            completionRate,
+            rating: Math.min(5, Math.max(1, rating)),
+            teamSize: teamMembers.size,
+            avgHours: 0, // TODO: Calcular de verdade se necessário
+            status,
+          });
+        } catch (error) {
+          console.error(`Erro ao carregar dados do supervisor ${supervisor.full_name}:`, error);
+        }
+      }
+
+      // Ordenar por completion rate (descendente)
+      performanceData.sort((a, b) => b.completionRate - a.completionRate);
+      setSupervisorsPerformance(performanceData);
+
+      // Carregar dados de carga de trabalho da equipe
+      await loadTeamMembersWorkload(supervisorsList);
     } catch (error) {
-      console.error('Error loading monitoring data:', error);
+      console.error('Erro ao carregar dados de monitoramento:', error);
     } finally {
       setLoading(false);
     }
   }
+
+  async function loadTeamMembersWorkload(supervisorsList: Supervisor[]) {
+    try {
+      const workloadMap = new Map<number, TeamMemberWorkload>();
+      const usersMap = new Map<number, any>();
+
+      // Carregar todos os usuários para referência rápida
+      const allUsers = await usersService.getAll();
+      allUsers.forEach((user: any) => {
+        usersMap.set(user.id, user);
+      });
+
+      // Carregar todos os projetos e suas tarefas
+      const allProjects = await projectsService.getAll({ include: 'stages' });
+
+      for (const supervisor of supervisorsList) {
+        const supervisorProjects = allProjects.filter(
+          (p: any) => p.supervisor_id === supervisor.id
+        );
+
+        for (const project of supervisorProjects) {
+          if (project.stages && Array.isArray(project.stages)) {
+            for (const stage of project.stages) {
+              const stageTasks = await tasksService.getByStage(stage.id);
+              const tasks = stageTasks.data || [];
+
+              // Processar cada tarefa para extrair informações de membros
+              for (const task of tasks) {
+                // Verificar assignments_array ou assignees_array (ambos são usados)
+                const assignments = task.assignments_array || task.assignees_array || [];
+
+                for (const assignment of assignments) {
+                  const userId = assignment.user_id || assignment.id;
+                  const dailyHours = assignment.daily_hours || 0;
+
+                  if (!workloadMap.has(userId)) {
+                    const user = usersMap.get(userId);
+                    if (user) {
+                      workloadMap.set(userId, {
+                        user_id: userId,
+                        user_name: user.full_name,
+                        supervisor_id: supervisor.id,
+                        supervisor_name: supervisor.full_name,
+                        allocated_hours: 0,
+                        tracked_hours: 0,
+                        active_projects: 0,
+                        completion_rate: 0,
+                        member_since_days: 0,
+                        status: 'ok',
+                      });
+                    }
+                  }
+
+                  const entry = workloadMap.get(userId);
+                  if (entry) {
+                    // Somar horas alocadas
+                    entry.allocated_hours += parseFloat(String(dailyHours)) || 0;
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // Definir active_projects para cada membro
+        for (const [, entry] of workloadMap.entries()) {
+          if (entry.supervisor_id === supervisor.id) {
+            entry.active_projects = supervisorProjects.length;
+          }
+        }
+      }
+
+      // Calcular horas rastreadas para cada membro
+      for (const [userId, entry] of workloadMap.entries()) {
+        try {
+          // Obter status do dia do usuário para horas rastreadas (apenas hoje por enquanto)
+          const dayStatus = await timeEntriesService.getUserDayStatus(userId);
+          if (dayStatus.success) {
+            entry.tracked_hours = dayStatus.data.total_hours_tracked || 0;
+          }
+        } catch (error) {
+          console.warn(`Erro ao carregar horas rastreadas do usuário ${userId}:`, error);
+          entry.tracked_hours = 0;
+        }
+
+        // Determinar status baseado em horas alocadas
+        if (entry.allocated_hours >= 8) {
+          entry.status = 'no_limite';
+        } else if (entry.allocated_hours >= 6) {
+          entry.status = 'atencao';
+        } else {
+          entry.status = 'ok';
+        }
+      }
+
+      // Converter para array e ordenar
+      const workloadArray = Array.from(workloadMap.values());
+
+      // Ordenação: no_limite → atencao → ok, dentro de cada grupo por horas descendente
+      const statusOrder = { 'no_limite': 0, 'atencao': 1, 'ok': 2 };
+      workloadArray.sort((a, b) => {
+        const statusDiff = statusOrder[a.status] - statusOrder[b.status];
+        if (statusDiff !== 0) return statusDiff;
+        return b.allocated_hours - a.allocated_hours;
+      });
+
+      setTeamMembersWorkload(workloadArray);
+    } catch (error) {
+      console.error('Erro ao carregar carga de trabalho da equipe:', error);
+      setTeamMembersWorkload([]);
+    }
+  }
+
+  const handlePeriodPreset = (preset: 'today' | '7days' | '30days') => {
+    const today = new Date();
+    let dateFrom = new Date();
+
+    switch (preset) {
+      case 'today':
+        dateFrom = new Date(today);
+        break;
+      case '7days':
+        dateFrom = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case '30days':
+        dateFrom = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+    }
+
+    setFilters({
+      ...filters,
+      periodPreset: preset,
+      dateFrom: dateFrom.toISOString().split('T')[0],
+      dateTo: today.toISOString().split('T')[0],
+    });
+  };
+
+  const handleDateFromChange = (date: string) => {
+    setFilters({
+      ...filters,
+      dateFrom: date,
+      periodPreset: 'custom',
+    });
+  };
+
+  const handleDateToChange = (date: string) => {
+    setFilters({
+      ...filters,
+      dateTo: date,
+      periodPreset: 'custom',
+    });
+  };
+
+  const handleSupervisorChange = (supervisorId: number | null) => {
+    setFilters({
+      ...filters,
+      supervisorId,
+    });
+  };
+
+  const handleStatusToggle = (status: TaskStatus) => {
+    setFilters((prev) => ({
+      ...prev,
+      statusFilters: prev.statusFilters.includes(status)
+        ? prev.statusFilters.filter((s) => s !== status)
+        : [...prev.statusFilters, status],
+    }));
+  };
+
+  const handleResetFilters = () => {
+    const today = new Date();
+    const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    setFilters({
+      dateFrom: sevenDaysAgo.toISOString().split('T')[0],
+      dateTo: today.toISOString().split('T')[0],
+      periodPreset: '7days',
+      supervisorId: null,
+      statusFilters: ['novo', 'em_desenvolvimento', 'analise_tecnica', 'concluido', 'refaca'],
+    });
+  };
 
   if (loading) {
     return (
@@ -70,212 +355,434 @@ export default function Monitoring() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Monitoramento</h1>
-        <p className="text-gray-600 mt-1">Acompanhe o desempenho da equipe e identifique gargalos</p>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">📊 Monitoramento</h1>
+          <p className="text-gray-600">Análise profunda de desempenho, equipe e projetos</p>
+        </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">Ranking de Engenheiros</h2>
-            <Award className="w-6 h-6 text-yellow-500" />
-          </div>
+        {/* ===== SEÇÃO 1: FILTROS & PERÍODO ===== */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          {/* Coluna 1: Período */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Calendar className="w-5 h-5 text-blue-600" />
+              <h3 className="font-semibold text-gray-900">📅 Período</h3>
+            </div>
 
-          <div className="space-y-4">
-            {userPerformance.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">Nenhum usuário encontrado</p>
-            ) : (
-              userPerformance.map((perf, index) => (
-                <div
-                  key={perf.user.id}
-                  className={`p-4 rounded-lg border-2 transition ${
-                    index === 0
-                      ? 'bg-yellow-50 border-yellow-300'
-                      : index === 1
-                      ? 'bg-gray-50 border-gray-300'
-                      : index === 2
-                      ? 'bg-orange-50 border-orange-300'
-                      : 'bg-white border-gray-200'
+            {/* Inputs de Data */}
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">De:</label>
+                <input
+                  type="date"
+                  value={filters.dateFrom}
+                  onChange={(e) => handleDateFromChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Até:</label>
+                <input
+                  type="date"
+                  value={filters.dateTo}
+                  onChange={(e) => handleDateToChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* Atalhos Rápidos */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-gray-600">Atalhos:</p>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => handlePeriodPreset('today')}
+                  className={`px-2 py-2 rounded text-xs font-medium transition-colors ${
+                    filters.periodPreset === 'today'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-3">
-                      <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
-                          index === 0
-                            ? 'bg-yellow-500 text-white'
-                            : index === 1
-                            ? 'bg-gray-400 text-white'
-                            : index === 2
-                            ? 'bg-orange-500 text-white'
-                            : 'bg-gray-200 text-gray-700'
-                        }`}
-                      >
-                        {index + 1}
-                      </div>
+                  Hoje
+                </button>
+                <button
+                  onClick={() => handlePeriodPreset('7days')}
+                  className={`px-2 py-2 rounded text-xs font-medium transition-colors ${
+                    filters.periodPreset === '7days'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  7 dias
+                </button>
+                <button
+                  onClick={() => handlePeriodPreset('30days')}
+                  className={`px-2 py-2 rounded text-xs font-medium transition-colors ${
+                    filters.periodPreset === '30days'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  30 dias
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Coluna 2: Filtrar Supervisor */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Users className="w-5 h-5 text-blue-600" />
+              <h3 className="font-semibold text-gray-900">👤 Filtrar Supervisor</h3>
+            </div>
+
+            <div className="relative">
+              <select
+                value={filters.supervisorId || ''}
+                onChange={(e) =>
+                  handleSupervisorChange(e.target.value ? parseInt(e.target.value) : null)
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm appearance-none bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Todos os supervisores</option>
+                {supervisors.map((supervisor) => (
+                  <option key={supervisor.id} value={supervisor.id}>
+                    {supervisor.full_name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            </div>
+
+            {filters.supervisorId && (
+              <button
+                onClick={() => handleSupervisorChange(null)}
+                className="mt-3 text-xs text-blue-600 hover:text-blue-800 font-medium"
+              >
+                Limpar filtro
+              </button>
+            )}
+          </div>
+
+          {/* Coluna 3: Filtrar Status */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Filter className="w-5 h-5 text-blue-600" />
+              <h3 className="font-semibold text-gray-900">📊 Filtrar Status</h3>
+            </div>
+
+            <div className="space-y-2">
+              {(['novo', 'em_desenvolvimento', 'analise_tecnica', 'concluido', 'refaca'] as TaskStatus[]).map(
+                (status) => (
+                  <label key={status} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={filters.statusFilters.includes(status)}
+                      onChange={() => handleStatusToggle(status)}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">{STATUS_LABELS[status]}</span>
+                  </label>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Botão Limpar Filtros */}
+        <div className="mb-8 flex justify-end">
+          <button
+            onClick={handleResetFilters}
+            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            🔄 Limpar Filtros
+          </button>
+        </div>
+
+        {/* Filtros Ativos - Info */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
+          <p className="text-sm text-blue-900">
+            <strong>Filtros Ativos:</strong> Período:{' '}
+            <span className="font-semibold">
+              {filters.dateFrom} até {filters.dateTo}
+            </span>
+            {filters.supervisorId && (
+              <>
+                {' '}
+                • Supervisor:{' '}
+                <span className="font-semibold">
+                  {supervisors.find((s) => s.id === filters.supervisorId)?.full_name}
+                </span>
+              </>
+            )}
+            {filters.statusFilters.length < 5 && (
+              <>
+                {' '}
+                • Status:{' '}
+                <span className="font-semibold">{filters.statusFilters.map((s) => STATUS_LABELS[s]).join(', ')}</span>
+              </>
+            )}
+          </p>
+        </div>
+
+        {/* ===== SEÇÃO 2: DESEMPENHO DOS SUPERVISORES ===== */}
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">🏆 Desempenho dos Supervisores</h2>
+
+          {supervisorsPerformance.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-600">
+              <p>Nenhum supervisor encontrado</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {supervisorsPerformance.slice(0, 3).map((perf, index) => {
+                const medals = ['🥇', '🥈', '🥉'];
+                const statusColors = {
+                  excelente: 'border-green-300 bg-green-50',
+                  bom: 'border-blue-300 bg-blue-50',
+                  atencao: 'border-yellow-300 bg-yellow-50',
+                };
+
+                return (
+                  <div
+                    key={perf.supervisor.id}
+                    className={`rounded-lg shadow-sm border-2 p-6 ${statusColors[perf.status]}`}
+                  >
+                    {/* Header com Medal e Stars */}
+                    <div className="flex items-start justify-between mb-4">
                       <div>
-                        <p className="font-medium text-gray-900">{perf.user.full_name}</p>
-                        <p className="text-xs text-gray-500">{perf.user.email}</p>
+                        <div className="text-3xl mb-2">{medals[index]}</div>
+                        <h3 className="text-lg font-bold text-gray-900">{perf.supervisor.full_name}</h3>
+                      </div>
+                      <div className="text-2xl">
+                        {'⭐'.repeat(perf.rating)}
+                        {'☆'.repeat(5 - perf.rating)}
                       </div>
                     </div>
 
-                    <div className="text-right">
-                      <div className="flex items-center space-x-1">
-                        {perf.completionRate >= 80 ? (
-                          <TrendingUp className="w-4 h-4 text-green-500" />
-                        ) : perf.completionRate < 50 ? (
-                          <TrendingDown className="w-4 h-4 text-red-500" />
-                        ) : null}
-                        <span className="text-lg font-bold text-gray-900">
-                          {perf.completionRate.toFixed(0)}%
+                    {/* Dados em Cards */}
+                    <div className="space-y-3 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Projetos:</span>
+                        <span className="font-semibold text-gray-900">
+                          {perf.totalProjects} ({perf.activeProjects} Ativos)
                         </span>
                       </div>
-                      <p className="text-xs text-gray-500">Taxa de conclusão</p>
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-4 gap-2 text-center">
-                    <div>
-                      <p className="text-lg font-semibold text-gray-900">{perf.totalTasks}</p>
-                      <p className="text-xs text-gray-600">Total</p>
-                    </div>
-                    <div>
-                      <p className="text-lg font-semibold text-green-600">{perf.completedTasks}</p>
-                      <p className="text-xs text-gray-600">Concluídas</p>
-                    </div>
-                    <div>
-                      <p className="text-lg font-semibold text-yellow-600">{perf.inProgressTasks}</p>
-                      <p className="text-xs text-gray-600">Em progresso</p>
-                    </div>
-                    <div>
-                      <p className="text-lg font-semibold text-red-600">{perf.refacaTasks}</p>
-                      <p className="text-xs text-gray-600">Refaça</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">Horas trabalhadas</span>
-                      <span className="font-semibold text-gray-900">
-                        {perf.totalHours.toFixed(1)}h
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">Desempenho de Supervisores</h2>
-            <User className="w-6 h-6 text-blue-500" />
-          </div>
-
-          <div className="space-y-4">
-            {supervisorPerformance.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">Nenhum supervisor encontrado</p>
-            ) : (
-              supervisorPerformance.map((perf) => (
-                <div
-                  key={perf.supervisor.id}
-                  className="p-4 rounded-lg border-2 border-gray-200 bg-white"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <User className="w-5 h-5 text-blue-600" />
+                      <div className="w-full bg-gray-300 rounded-full h-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full"
+                          style={{ width: `${(perf.activeProjects / Math.max(perf.totalProjects, 1)) * 100}%` }}
+                        />
                       </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{perf.supervisor.full_name}</p>
-                        <p className="text-xs text-gray-500">{perf.supervisor.email}</p>
+
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Taxa Conclusão:</span>
+                        <span className="font-semibold text-gray-900">{perf.completionRate}%</span>
+                      </div>
+
+                      <div className="w-full bg-gray-300 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full ${
+                            perf.completionRate >= 80
+                              ? 'bg-green-500'
+                              : perf.completionRate >= 60
+                              ? 'bg-blue-500'
+                              : 'bg-yellow-500'
+                          }`}
+                          style={{ width: `${perf.completionRate}%` }}
+                        />
+                      </div>
+
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Tarefas:</span>
+                        <span className="font-semibold text-gray-900">
+                          {perf.completedTasks}/{perf.totalTasks} ✓
+                          {perf.refacaTasks > 0 && `, ${perf.refacaTasks} ⚠️`}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Equipe:</span>
+                        <span className="font-semibold text-gray-900">{perf.teamSize} membros</span>
+                      </div>
+
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Taxa Refaça:</span>
+                        <span
+                          className={`font-semibold ${
+                            perf.refacaTasks === 0 ? 'text-green-600' : 'text-red-600'
+                          }`}
+                        >
+                          {perf.totalTasks > 0
+                            ? Math.round((perf.refacaTasks / perf.totalTasks) * 100)
+                            : 0}
+                          %
+                        </span>
                       </div>
                     </div>
 
-                    <div className="text-right">
-                      <span className="text-lg font-bold text-gray-900">
-                        {perf.completionRate.toFixed(0)}%
-                      </span>
-                      <p className="text-xs text-gray-500">Conclusão</p>
+                    {/* Status e Ação */}
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                            perf.status === 'excelente'
+                              ? 'bg-green-200 text-green-800'
+                              : perf.status === 'bom'
+                              ? 'bg-blue-200 text-blue-800'
+                              : 'bg-yellow-200 text-yellow-800'
+                          }`}
+                        >
+                          {perf.status === 'excelente'
+                            ? '🟢 Excelente'
+                            : perf.status === 'bom'
+                            ? '🟢 Bom'
+                            : '🟡 Atenção'}
+                        </span>
+                      </div>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-4 gap-2 text-center">
-                    <div>
-                      <p className="text-lg font-semibold text-gray-900">{perf.totalProjects}</p>
-                      <p className="text-xs text-gray-600">Projetos</p>
-                    </div>
-                    <div>
-                      <p className="text-lg font-semibold text-green-600">{perf.activeProjects}</p>
-                      <p className="text-xs text-gray-600">Ativos</p>
-                    </div>
-                    <div>
-                      <p className="text-lg font-semibold text-blue-600">{perf.totalTasks}</p>
-                      <p className="text-xs text-gray-600">Tarefas</p>
-                    </div>
-                    <div>
-                      <p className="text-lg font-semibold text-green-600">{perf.completedTasks}</p>
-                      <p className="text-xs text-gray-600">Completas</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-3">
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-500 h-2 rounded-full transition-all"
-                        style={{ width: `${perf.completionRate}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-900">Indicadores de Gargalos</h2>
-          <AlertTriangle className="w-6 h-6 text-orange-500" />
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="p-6 rounded-lg bg-red-50 border-2 border-red-200">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-gray-900">Tarefas em Refaça</h3>
-              <AlertTriangle className="w-5 h-5 text-red-600" />
-            </div>
-            <p className="text-3xl font-bold text-red-600">
-              {userPerformance.reduce((sum, p) => sum + p.refacaTasks, 0)}
-            </p>
-            <p className="text-sm text-gray-600 mt-2">Requerem atenção imediata</p>
-          </div>
+        {/* ===== SEÇÃO 3: CARGA DE TRABALHO DA EQUIPE ===== */}
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">📊 Carga de Trabalho da Equipe</h2>
 
-          <div className="p-6 rounded-lg bg-yellow-50 border-2 border-yellow-200">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-gray-900">Baixo Desempenho</h3>
-              <TrendingDown className="w-5 h-5 text-yellow-600" />
+          {teamMembersWorkload.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-600">
+              <p>Nenhum membro de equipe encontrado</p>
             </div>
-            <p className="text-3xl font-bold text-yellow-600">
-              {userPerformance.filter((p) => p.completionRate < 50).length}
-            </p>
-            <p className="text-sm text-gray-600 mt-2">Usuários abaixo de 50%</p>
-          </div>
+          ) : (
+            <div className="overflow-x-auto bg-white rounded-lg shadow-sm border border-gray-200">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">MEMBRO</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">SUPERVISOR</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">ALOCADO</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">RASTREADO</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">DIFERENÇA</th>
+                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">PROJETOS</th>
+                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">STATUS</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {teamMembersWorkload.map((member) => {
+                    const allocatedPercent = Math.min(100, (member.allocated_hours / 8) * 100);
+                    const trackedPercent = Math.min(100, (member.tracked_hours / 8) * 100);
+                    const differenceHours = member.allocated_hours - member.tracked_hours;
+                    const differencePercent = member.allocated_hours > 0
+                      ? Math.round((member.tracked_hours / member.allocated_hours) * 100)
+                      : 0;
 
-          <div className="p-6 rounded-lg bg-orange-50 border-2 border-orange-200">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-gray-900">Sobrecarga</h3>
-              <AlertTriangle className="w-5 h-5 text-orange-600" />
+                    const statusColors = {
+                      'no_limite': 'bg-red-50 hover:bg-red-100',
+                      'atencao': 'bg-yellow-50 hover:bg-yellow-100',
+                      'ok': 'bg-green-50 hover:bg-green-100',
+                    };
+
+                    const statusBadges = {
+                      'no_limite': { emoji: '🔴', text: 'NO LIMITE', color: 'bg-red-200 text-red-800' },
+                      'atencao': { emoji: '🟡', text: 'ATENÇÃO', color: 'bg-yellow-200 text-yellow-800' },
+                      'ok': { emoji: '🟢', text: 'OK', color: 'bg-green-200 text-green-800' },
+                    };
+
+                    const badge = statusBadges[member.status];
+
+                    return (
+                      <tr key={member.user_id} className={`transition-colors ${statusColors[member.status]}`}>
+                        {/* Membro */}
+                        <td className="px-6 py-4">
+                          <div>
+                            <p className="font-medium text-gray-900">👤 {member.user_name}</p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Desde: {member.member_since_days > 0 ? `${member.member_since_days}d` : 'Novo'}
+                            </p>
+                          </div>
+                        </td>
+
+                        {/* Supervisor */}
+                        <td className="px-6 py-4">
+                          <p className="text-sm text-gray-700">{member.supervisor_name}</p>
+                        </td>
+
+                        {/* Alocado */}
+                        <td className="px-6 py-4">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {member.allocated_hours.toFixed(1)}/8h ({allocatedPercent.toFixed(0)}%)
+                            </p>
+                            <div className="mt-2 w-24 h-2 bg-gray-300 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full ${
+                                  allocatedPercent >= 100 ? 'bg-red-500' :
+                                  allocatedPercent >= 75 ? 'bg-yellow-500' :
+                                  'bg-blue-500'
+                                }`}
+                                style={{ width: `${allocatedPercent}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Rastreado */}
+                        <td className="px-6 py-4">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {member.tracked_hours.toFixed(1)}h ({trackedPercent.toFixed(0)}%)
+                            </p>
+                            <div className="mt-2 w-24 h-2 bg-gray-300 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-purple-500"
+                                style={{ width: `${trackedPercent}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Diferença */}
+                        <td className="px-6 py-4">
+                          <p className={`text-sm font-medium ${
+                            differenceHours < 0 ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            {differenceHours >= 0 ? '+' : ''}{differenceHours.toFixed(1)}h ({differencePercent}%)
+                          </p>
+                        </td>
+
+                        {/* Projetos */}
+                        <td className="px-6 py-4 text-center">
+                          <p className="text-sm font-medium text-gray-900">{member.active_projects}</p>
+                        </td>
+
+                        {/* Status */}
+                        <td className="px-6 py-4 text-center">
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${badge.color}`}>
+                            {badge.emoji} {badge.text}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-            <p className="text-3xl font-bold text-orange-600">
-              {userPerformance.filter((p) => p.inProgressTasks > 5).length}
-            </p>
-            <p className="text-sm text-gray-600 mt-2">Usuários com mais de 5 tarefas</p>
-          </div>
+          )}
+        </div>
+
+        {/* Placeholder para Seções 4-9 */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-600">
+          <p className="text-lg font-medium">🚀 Seções 4-9 em desenvolvimento...</p>
+          <p className="text-sm mt-2">
+            Histórico, Análises, Risco, Horas, Top Tarefas, Ranking
+          </p>
         </div>
       </div>
     </div>
