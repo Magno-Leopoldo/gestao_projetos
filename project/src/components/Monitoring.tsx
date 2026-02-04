@@ -48,6 +48,27 @@ interface TeamMemberWorkload {
   status: 'no_limite' | 'atencao' | 'ok'; // Based on allocated vs limit
 }
 
+interface AssignmentHistory {
+  id: number;
+  user_id: number;
+  user_name: string;
+  supervisor_name: string;
+  task_id: number;
+  task_title: string;
+  project_name: string;
+  daily_hours: number;
+  assigned_at: string; // ISO date
+  task_status: TaskStatus;
+  task_progress: number; // 0-100
+}
+
+interface AssignmentStats {
+  total: number;
+  today: number;
+  this_week: number;
+  this_month: number;
+}
+
 export default function Monitoring() {
   const [filters, setFilters] = useState<FilterState>({
     dateFrom: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -60,6 +81,14 @@ export default function Monitoring() {
   const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
   const [supervisorsPerformance, setSupervisorsPerformance] = useState<SupervisorPerformance[]>([]);
   const [teamMembersWorkload, setTeamMembersWorkload] = useState<TeamMemberWorkload[]>([]);
+  const [assignmentHistory, setAssignmentHistory] = useState<AssignmentHistory[]>([]);
+  const [assignmentStats, setAssignmentStats] = useState<AssignmentStats>({
+    total: 0,
+    today: 0,
+    this_week: 0,
+    this_month: 0,
+  });
+  const [assignmentPage, setAssignmentPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -78,6 +107,13 @@ export default function Monitoring() {
       }
     }
   }, [filters.supervisorId, supervisors]);
+
+  // Reload assignment history when filters change
+  useEffect(() => {
+    if (supervisors.length > 0) {
+      loadAssignmentHistory();
+    }
+  }, [filters.supervisorId]);
 
   async function loadMonitoringData() {
     try {
@@ -159,10 +195,97 @@ export default function Monitoring() {
 
       // Carregar dados de carga de trabalho da equipe
       await loadTeamMembersWorkload(supervisorsList);
+
+      // Carregar histórico de atribuições
+      await loadAssignmentHistory();
     } catch (error) {
       console.error('Erro ao carregar dados de monitoramento:', error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadAssignmentHistory() {
+    try {
+      const history: AssignmentHistory[] = [];
+      const today = new Date();
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - today.getDay());
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+      // Carregar todos os projetos e suas tarefas
+      const allProjects = await projectsService.getAll({ include: 'stages' });
+      let supervisorsMap = new Map<number, Supervisor>();
+      supervisors.forEach((s) => supervisorsMap.set(s.id, s));
+
+      // Determinar filtro de supervisor (se houver)
+      let filteredProjects = allProjects;
+      if (filters.supervisorId) {
+        filteredProjects = allProjects.filter(
+          (p: any) => p.supervisor_id === filters.supervisorId
+        );
+      }
+
+      // Iterar sobre projetos e stages para coletar atribuições
+      for (const project of filteredProjects) {
+        if (project.stages && Array.isArray(project.stages)) {
+          for (const stage of project.stages) {
+            const stageTasks = await tasksService.getByStage(stage.id);
+            const tasks = stageTasks.data || [];
+
+            for (const task of tasks) {
+              // Coletar atribuições da tarefa
+              const assignments = task.assignments_array || [];
+
+              for (const assignment of assignments) {
+                const userId = assignment.user_id || assignment.id;
+                const supervisor = supervisorsMap.get(project.supervisor_id);
+
+                history.push({
+                  id: `${task.id}-${userId}`, // Fake ID para key
+                  user_id: userId,
+                  user_name: assignment.user_name || 'Desconhecido',
+                  supervisor_name: supervisor?.full_name || 'N/A',
+                  task_id: task.id,
+                  task_title: task.title,
+                  project_name: project.name,
+                  daily_hours: parseFloat(String(assignment.daily_hours)) || 0,
+                  assigned_at: assignment.assigned_at || new Date().toISOString(),
+                  task_status: task.status,
+                  task_progress: task.progress || 0,
+                });
+              }
+            }
+          }
+        }
+      }
+
+      // Ordenar por data (mais recentes primeiro)
+      history.sort((a, b) => new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime());
+
+      // Calcular estatísticas
+      const stats = {
+        total: history.length,
+        today: history.filter((h) => {
+          const date = new Date(h.assigned_at);
+          return date.toDateString() === today.toDateString();
+        }).length,
+        this_week: history.filter((h) => {
+          const date = new Date(h.assigned_at);
+          return date >= startOfWeek && date <= today;
+        }).length,
+        this_month: history.filter((h) => {
+          const date = new Date(h.assigned_at);
+          return date >= startOfMonth && date <= today;
+        }).length,
+      };
+
+      setAssignmentStats(stats);
+      setAssignmentHistory(history);
+      setAssignmentPage(1);
+    } catch (error) {
+      console.error('Erro ao carregar histórico de atribuições:', error);
+      setAssignmentHistory([]);
     }
   }
 
@@ -345,6 +468,32 @@ export default function Monitoring() {
       statusFilters: ['novo', 'em_desenvolvimento', 'analise_tecnica', 'concluido', 'refaca'],
     });
   };
+
+  // Formatar timestamp relativo (ex: "10 min atrás", "Ontem 16:45")
+  function formatRelativeTime(isoDate: string): string {
+    const date = new Date(isoDate);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / (24 * 3600000));
+
+    if (diffMins < 1) return 'Agora';
+    if (diffMins < 60) return `${diffMins} min atrás`;
+    if (diffHours < 24) return `${diffHours}h atrás`;
+    if (diffDays === 1) {
+      return `Ontem ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+    }
+    if (diffDays < 7) return `${diffDays}d atrás`;
+
+    // Formato: "15 Feb 14:30"
+    return date.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
 
   if (loading) {
     return (
@@ -777,11 +926,139 @@ export default function Monitoring() {
           )}
         </div>
 
-        {/* Placeholder para Seções 4-9 */}
+        {/* ===== SEÇÃO 4: HISTÓRICO DE ATRIBUIÇÕES ===== */}
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">📋 Histórico de Atribuições</h2>
+
+          {/* Estatísticas no topo */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 font-medium">TOTAL</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{assignmentStats.total}</p>
+              <p className="text-xs text-gray-600 mt-1">atribuições</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 font-medium">HOJE</p>
+              <p className="text-2xl font-bold text-blue-600 mt-1">{assignmentStats.today}</p>
+              <p className="text-xs text-gray-600 mt-1">atribuições</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 font-medium">ESTA SEMANA</p>
+              <p className="text-2xl font-bold text-green-600 mt-1">{assignmentStats.this_week}</p>
+              <p className="text-xs text-gray-600 mt-1">atribuições</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 font-medium">ESTE MÊS</p>
+              <p className="text-2xl font-bold text-purple-600 mt-1">{assignmentStats.this_month}</p>
+              <p className="text-xs text-gray-600 mt-1">atribuições</p>
+            </div>
+          </div>
+
+          {/* Tabela de histórico */}
+          {assignmentHistory.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-600">
+              <p>Nenhuma atribuição encontrada</p>
+            </div>
+          ) : (
+            <div>
+              <div className="overflow-x-auto bg-white rounded-lg shadow-sm border border-gray-200">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">TIMESTAMP</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">USUÁRIO</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">TAREFA / PROJETO</th>
+                      <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">HORAS</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">STATUS</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {assignmentHistory.slice((assignmentPage - 1) * 15, assignmentPage * 15).map((item) => {
+                      const statusBadgeColors = {
+                        novo: 'bg-gray-200 text-gray-800',
+                        em_desenvolvimento: 'bg-blue-200 text-blue-800',
+                        analise_tecnica: 'bg-purple-200 text-purple-800',
+                        concluido: 'bg-green-200 text-green-800',
+                        refaca: 'bg-red-200 text-red-800',
+                      };
+
+                      return (
+                        <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-4">
+                            <p className="text-sm font-medium text-gray-900">
+                              {formatRelativeTime(item.assigned_at)}
+                            </p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">👤 {item.user_name}</p>
+                              <p className="text-xs text-gray-500 mt-1">({item.supervisor_name})</p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{item.task_title}</p>
+                              <p className="text-xs text-gray-500 mt-1">→ {item.project_name}</p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <p className="text-sm font-medium text-gray-900">{item.daily_hours.toFixed(1)}h</p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm">✅</span>
+                              <div>
+                                <p className="text-xs font-medium text-gray-700">Ativo</p>
+                                <p className="text-xs text-gray-600">Progresso: {item.task_progress}%</p>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Paginação */}
+              {assignmentHistory.length > 15 && (
+                <div className="mt-4 flex items-center justify-between">
+                  <p className="text-sm text-gray-600">
+                    Mostrando {(assignmentPage - 1) * 15 + 1} a{' '}
+                    {Math.min(assignmentPage * 15, assignmentHistory.length)} de {assignmentHistory.length}
+                  </p>
+                  <div className="space-x-2">
+                    <button
+                      onClick={() => setAssignmentPage(Math.max(1, assignmentPage - 1))}
+                      disabled={assignmentPage === 1}
+                      className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      ← Anterior
+                    </button>
+                    <span className="text-sm text-gray-600">
+                      Página {assignmentPage} de {Math.ceil(assignmentHistory.length / 15)}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setAssignmentPage(Math.min(Math.ceil(assignmentHistory.length / 15), assignmentPage + 1))
+                      }
+                      disabled={assignmentPage >= Math.ceil(assignmentHistory.length / 15)}
+                      className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Próxima →
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Placeholder para Seções 5-9 */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-600">
-          <p className="text-lg font-medium">🚀 Seções 4-9 em desenvolvimento...</p>
+          <p className="text-lg font-medium">🚀 Seções 5-9 em desenvolvimento...</p>
           <p className="text-sm mt-2">
-            Histórico, Análises, Risco, Horas, Top Tarefas, Ranking
+            Análises, Risco, Horas, Top Tarefas, Ranking
           </p>
         </div>
       </div>
