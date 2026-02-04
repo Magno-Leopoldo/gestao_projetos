@@ -33,7 +33,6 @@ interface SupervisorPerformance {
   completedTasks: number;
   refacaTasks: number;
   completionRate: number;
-  rating: number; // 1-5 stars
   teamSize: number;
   avgHours: number;
   status: 'excelente' | 'bom' | 'atencao';
@@ -258,7 +257,6 @@ export default function Monitoring() {
           }
 
           const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-          const rating = Math.ceil((completionRate / 20)); // 1-5 stars based on percentage
 
           // Determinar status baseado em completionRate
           let status: 'excelente' | 'bom' | 'atencao' = 'atencao';
@@ -273,7 +271,6 @@ export default function Monitoring() {
             completedTasks,
             refacaTasks,
             completionRate,
-            rating: Math.min(5, Math.max(1, rating)),
             teamSize: teamMembers.size,
             avgHours: 0, // TODO: Calcular de verdade se necessário
             status,
@@ -817,17 +814,12 @@ export default function Monitoring() {
                   if (entry) {
                     // Somar horas alocadas
                     entry.allocated_hours += parseFloat(String(dailyHours)) || 0;
+                    // Contar tarefas atribuídas
+                    entry.active_projects += 1;
                   }
                 }
               }
             }
-          }
-        }
-
-        // Definir active_projects para cada membro
-        for (const [, entry] of workloadMap.entries()) {
-          if (entry.supervisor_id === supervisor.id) {
-            entry.active_projects = supervisorProjects.length;
           }
         }
       }
@@ -1172,16 +1164,10 @@ export default function Monitoring() {
                     key={perf.supervisor.id}
                     className={`rounded-lg shadow-sm border-2 p-6 ${statusColors[perf.status]}`}
                   >
-                    {/* Header com Medal e Stars */}
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
-                        <div className="text-3xl mb-2">{medals[index]}</div>
-                        <h3 className="text-lg font-bold text-gray-900">{perf.supervisor.full_name}</h3>
-                      </div>
-                      <div className="text-2xl">
-                        {'⭐'.repeat(perf.rating)}
-                        {'☆'.repeat(5 - perf.rating)}
-                      </div>
+                    {/* Header com Medal */}
+                    <div className="mb-4">
+                      <div className="text-3xl mb-2">{medals[index]}</div>
+                      <h3 className="text-lg font-bold text-gray-900">{perf.supervisor.full_name}</h3>
                     </div>
 
                     {/* Dados em Cards */}
@@ -1762,13 +1748,6 @@ export default function Monitoring() {
                           style={{ width: `${task.progress}%` }}
                         />
                       </div>
-                    </div>
-
-                    {/* Ação */}
-                    <div className="flex justify-end">
-                      <button className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
-                        📋 Detalhes
-                      </button>
                     </div>
                   </div>
                 );
