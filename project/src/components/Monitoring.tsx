@@ -1,5 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Calendar, Users, Filter, ChevronDown, Star, AlertCircle } from 'lucide-react';
+import {
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
 import { TaskStatus, STATUS_LABELS } from '../types';
 import { usersService } from '../services/usersService';
 import { projectsService } from '../services/projectsService';
@@ -69,6 +81,19 @@ interface AssignmentStats {
   this_month: number;
 }
 
+interface AssignmentAnalysis {
+  byUser: Array<{ name: string; count: number }>;
+  bySupervisor: Array<{ name: string; count: number }>;
+  byHours: Array<{ range: string; percentage: number; count: number }>;
+  statistics: {
+    average: number;
+    mode: string;
+    median: number;
+    errorRate: number;
+  };
+  dailyTrend: Array<{ day: string; count: number }>;
+}
+
 export default function Monitoring() {
   const [filters, setFilters] = useState<FilterState>({
     dateFrom: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -89,6 +114,18 @@ export default function Monitoring() {
     this_month: 0,
   });
   const [assignmentPage, setAssignmentPage] = useState(1);
+  const [assignmentAnalysis, setAssignmentAnalysis] = useState<AssignmentAnalysis>({
+    byUser: [],
+    bySupervisor: [],
+    byHours: [],
+    statistics: {
+      average: 0,
+      mode: '0h',
+      median: 0,
+      errorRate: 0,
+    },
+    dailyTrend: [],
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -283,9 +320,114 @@ export default function Monitoring() {
       setAssignmentStats(stats);
       setAssignmentHistory(history);
       setAssignmentPage(1);
+
+      // Calcular análise das atribuições
+      await calculateAssignmentAnalysis(history);
     } catch (error) {
       console.error('Erro ao carregar histórico de atribuições:', error);
       setAssignmentHistory([]);
+    }
+  }
+
+  async function calculateAssignmentAnalysis(history: AssignmentHistory[]) {
+    try {
+      // Filtrar apenas atribuições desta semana
+      const today = new Date();
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - today.getDay());
+
+      const weekHistory = history.filter((h) => {
+        const date = new Date(h.assigned_at);
+        return date >= startOfWeek && date <= today;
+      });
+
+      // Análise por usuário
+      const userMap = new Map<string, number>();
+      weekHistory.forEach((h) => {
+        userMap.set(h.user_name, (userMap.get(h.user_name) || 0) + 1);
+      });
+      const byUser = Array.from(userMap.entries())
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+
+      // Análise por supervisor
+      const supervisorMap = new Map<string, number>();
+      weekHistory.forEach((h) => {
+        supervisorMap.set(h.supervisor_name, (supervisorMap.get(h.supervisor_name) || 0) + 1);
+      });
+      const bySupervisor = Array.from(supervisorMap.entries())
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+
+      // Análise por range de horas
+      const ranges = [
+        { range: '1-3h', min: 1, max: 3 },
+        { range: '3-6h', min: 3, max: 6 },
+        { range: '6-8h', min: 6, max: 8 },
+      ];
+      const byHours = ranges.map((r) => {
+        const count = weekHistory.filter((h) => h.daily_hours >= r.min && h.daily_hours <= r.max).length;
+        return {
+          range: r.range,
+          count,
+          percentage: weekHistory.length > 0 ? Math.round((count / weekHistory.length) * 100) : 0,
+        };
+      });
+
+      // Estatísticas
+      const hours = weekHistory.map((h) => h.daily_hours);
+      const average = hours.length > 0 ? hours.reduce((a, b) => a + b, 0) / hours.length : 0;
+      const sorted = [...hours].sort((a, b) => a - b);
+      const median = sorted.length % 2 === 0 ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2 : sorted[Math.floor(sorted.length / 2)];
+
+      // Moda (valor mais frequente)
+      const hourCounts = new Map<number, number>();
+      hours.forEach((h) => {
+        hourCounts.set(h, (hourCounts.get(h) || 0) + 1);
+      });
+      let mode = hours.length > 0 ? hours[0] : 0;
+      let maxCount = 0;
+      hourCounts.forEach((count, hour) => {
+        if (count > maxCount) {
+          maxCount = count;
+          mode = hour;
+        }
+      });
+
+      // Tendência por dia da semana
+      const dayMap = new Map<string, number>();
+      const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(startOfWeek);
+        d.setDate(startOfWeek.getDate() + i);
+        dayMap.set(dayNames[d.getDay()], 0);
+      }
+      weekHistory.forEach((h) => {
+        const date = new Date(h.assigned_at);
+        const day = dayNames[date.getDay()];
+        dayMap.set(day, (dayMap.get(day) || 0) + 1);
+      });
+      const dailyTrend = Array.from(dayMap.entries()).map(([day, count]) => ({ day, count }));
+
+      // Taxa de erro (considerando 0 de erro para agora)
+      const errorRate = 0;
+
+      setAssignmentAnalysis({
+        byUser,
+        bySupervisor,
+        byHours,
+        statistics: {
+          average: Math.round(average * 10) / 10,
+          mode: `${mode}h`,
+          median: Math.round(median * 10) / 10,
+          errorRate,
+        },
+        dailyTrend,
+      });
+    } catch (error) {
+      console.error('Erro ao calcular análise de atribuições:', error);
     }
   }
 
@@ -1054,11 +1196,153 @@ export default function Monitoring() {
           )}
         </div>
 
-        {/* Placeholder para Seções 5-9 */}
+        {/* ===== SEÇÃO 5: ANÁLISE DE ATRIBUIÇÕES ===== */}
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">📈 Análise de Atribuições</h2>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Coluna Esquerda - Gráficos */}
+            <div className="space-y-6">
+              {/* Atribuições por Usuário */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="font-semibold text-gray-900 mb-4">Atribuições por Usuário (Esta Semana)</h3>
+                {assignmentAnalysis.byUser.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={assignmentAnalysis.byUser} layout="vertical" margin={{ left: 100 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" />
+                      <YAxis dataKey="name" type="category" width={95} tick={{ fontSize: 12 }} />
+                      <Tooltip />
+                      <Bar dataKey="count" fill="#3b82f6" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-gray-600 text-sm">Sem dados disponíveis</p>
+                )}
+              </div>
+
+              {/* Atribuições por Supervisor */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="font-semibold text-gray-900 mb-4">Atribuições por Supervisor (Esta Semana)</h3>
+                {assignmentAnalysis.bySupervisor.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={assignmentAnalysis.bySupervisor} layout="vertical" margin={{ left: 100 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" />
+                      <YAxis dataKey="name" type="category" width={95} tick={{ fontSize: 12 }} />
+                      <Tooltip />
+                      <Bar dataKey="count" fill="#10b981" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-gray-600 text-sm">Sem dados disponíveis</p>
+                )}
+              </div>
+
+              {/* Estatísticas da Semana */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="font-semibold text-gray-900 mb-4">Estatísticas da Semana</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Média por Dia:</span>
+                    <span className="font-semibold text-gray-900">
+                      {Math.round((assignmentHistory.filter((h) => {
+                        const date = new Date(h.assigned_at);
+                        const today = new Date();
+                        const startOfWeek = new Date(today);
+                        startOfWeek.setDate(today.getDate() - today.getDay());
+                        return date >= startOfWeek && date <= today;
+                      }).length / 7) * 10) / 10}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Peak:</span>
+                    <span className="font-semibold text-gray-900">
+                      {Math.max(...(assignmentAnalysis.dailyTrend.map((d) => d.count) || [0]))} atribuições
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Mínimo:</span>
+                    <span className="font-semibold text-gray-900">
+                      {Math.min(...(assignmentAnalysis.dailyTrend.map((d) => d.count) || [0]))} atribuições
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Coluna Direita - Padrões */}
+            <div className="space-y-6">
+              {/* Distribuição de Horas */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="font-semibold text-gray-900 mb-4">Distribuição de Horas</h3>
+                <div className="space-y-3">
+                  {assignmentAnalysis.byHours.map((item) => (
+                    <div key={item.range}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-600">{item.range}</span>
+                        <span className="text-gray-900 font-semibold">{item.percentage}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-500 h-2 rounded-full"
+                          style={{ width: `${item.percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Estatísticas de Horas */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="font-semibold text-gray-900 mb-4">Análise de Horas</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Média:</span>
+                    <span className="font-semibold text-gray-900">{assignmentAnalysis.statistics.average}h</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Moda:</span>
+                    <span className="font-semibold text-gray-900">{assignmentAnalysis.statistics.mode}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Mediana:</span>
+                    <span className="font-semibold text-gray-900">{assignmentAnalysis.statistics.median}h</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Taxa de Erro:</span>
+                    <span className="font-semibold text-gray-900">{assignmentAnalysis.statistics.errorRate}%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tendência de Atribuições */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="font-semibold text-gray-900 mb-4">Tendência Diária</h3>
+                {assignmentAnalysis.dailyTrend.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={150}>
+                    <LineChart data={assignmentAnalysis.dailyTrend}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="day" />
+                      <YAxis />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="count" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 4 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-gray-600 text-sm">Sem dados disponíveis</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Placeholder para Seções 6-9 */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-600">
-          <p className="text-lg font-medium">🚀 Seções 5-9 em desenvolvimento...</p>
+          <p className="text-lg font-medium">🚀 Seções 6-9 em desenvolvimento...</p>
           <p className="text-sm mt-2">
-            Análises, Risco, Horas, Top Tarefas, Ranking
+            Risco, Horas, Top Tarefas, Ranking
           </p>
         </div>
       </div>
