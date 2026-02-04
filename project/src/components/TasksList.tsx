@@ -7,6 +7,7 @@ import { projectsService } from '../services/projectsService';
 import { stagesService } from '../services/stagesService';
 import { useAuth } from '../contexts/AuthContext';
 import CreateTaskModal from './CreateTaskModal';
+import UpdateTaskStatusModal from './UpdateTaskStatusModal';
 
 type SortBy = 'order' | 'status' | 'priority' | 'estimated_hours';
 
@@ -35,12 +36,22 @@ const TasksList: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalTasks, setTotalTasks] = useState(0);
   const [tasksPerPage] = useState(20);
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [selectedTaskForStatus, setSelectedTaskForStatus] = useState<{ id: number; title: string; status: TaskStatus } | null>(null);
 
   useEffect(() => {
     if (projectId && stageId) {
       loadData(parseInt(projectId), parseInt(stageId));
     }
   }, [projectId, stageId, currentPage]);
+
+  // Recarregar dados quando o status selecionado muda
+  useEffect(() => {
+    if (projectId && stageId) {
+      setCurrentPage(1);
+      loadData(parseInt(projectId), parseInt(stageId));
+    }
+  }, [selectedStatus]);
 
   const loadData = async (pId: number, sId: number) => {
     setLoading(true);
@@ -201,6 +212,38 @@ const TasksList: React.FC = () => {
     return PRIORITY_COLORS[priority as keyof typeof PRIORITY_COLORS] || 'gray';
   };
 
+  const getTaskStatusBadgeColor = (status: TaskStatus) => {
+    const colors: Record<TaskStatus, string> = {
+      novo: 'bg-blue-100 text-blue-900 border border-blue-500 hover:scale-105 hover:shadow-md transition-all',
+      em_desenvolvimento: 'bg-yellow-100 text-yellow-900 border border-yellow-500 hover:scale-105 hover:shadow-md transition-all',
+      analise_tecnica: 'bg-purple-100 text-purple-900 border border-purple-500 hover:scale-105 hover:shadow-md transition-all',
+      concluido: 'bg-green-100 text-green-900 border border-green-500 hover:scale-105 hover:shadow-md transition-all',
+      refaca: 'bg-red-100 text-red-900 border border-red-500 hover:scale-105 hover:shadow-md transition-all',
+    };
+    return colors[status] || 'bg-gray-100 text-gray-900 border border-gray-400 hover:scale-105 hover:shadow-md transition-all';
+  };
+
+  const handleOpenStatusModal = (task: TaskWithMetrics) => {
+    setSelectedTaskForStatus({
+      id: task.id,
+      title: task.title,
+      status: task.status,
+    });
+    setStatusModalOpen(true);
+  };
+
+  const handleStatusModalClose = () => {
+    setStatusModalOpen(false);
+    setSelectedTaskForStatus(null);
+  };
+
+  const handleStatusModalSuccess = () => {
+    // Recarregar dados após atualizar
+    if (projectId && stageId) {
+      loadData(parseInt(projectId), parseInt(stageId));
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -282,20 +325,58 @@ const TasksList: React.FC = () => {
               </div>
             )}
 
-            {/* Status Filter */}
-            <div className="min-w-xs">
-              <select
-                value={selectedStatus || ''}
-                onChange={(e) => setSelectedStatus(e.target.value ? (e.target.value as TaskStatus) : null)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+            {/* Status Filter - Buttons */}
+            <div className="flex gap-2 flex-wrap items-center">
+              <button
+                onClick={() => setSelectedStatus(null)}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  selectedStatus === null
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
               >
-                <option value="">📋 Todos os status</option>
-                <option value="novo">{STATUS_LABELS.novo}</option>
-                <option value="em_desenvolvimento">{STATUS_LABELS.em_desenvolvimento}</option>
-                <option value="analise_tecnica">{STATUS_LABELS.analise_tecnica}</option>
-                <option value="concluido">{STATUS_LABELS.concluido}</option>
-                <option value="refaca">{STATUS_LABELS.refaca}</option>
-              </select>
+                Todos
+              </button>
+              <button
+                onClick={() => setSelectedStatus('novo')}
+                className={`px-4 py-2 rounded-lg font-medium ${
+                  selectedStatus === 'novo'
+                    ? getTaskStatusBadgeColor('novo') + ' cursor-pointer'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {STATUS_LABELS.novo}
+              </button>
+              <button
+                onClick={() => setSelectedStatus('em_desenvolvimento')}
+                className={`px-4 py-2 rounded-lg font-medium ${
+                  selectedStatus === 'em_desenvolvimento'
+                    ? getTaskStatusBadgeColor('em_desenvolvimento') + ' cursor-pointer'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {STATUS_LABELS.em_desenvolvimento}
+              </button>
+              <button
+                onClick={() => setSelectedStatus('concluido')}
+                className={`px-4 py-2 rounded-lg font-medium ${
+                  selectedStatus === 'concluido'
+                    ? getTaskStatusBadgeColor('concluido') + ' cursor-pointer'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {STATUS_LABELS.concluido}
+              </button>
+              <button
+                onClick={() => setSelectedStatus('refaca')}
+                className={`px-4 py-2 rounded-lg font-medium ${
+                  selectedStatus === 'refaca'
+                    ? getTaskStatusBadgeColor('refaca') + ' cursor-pointer'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {STATUS_LABELS.refaca}
+              </button>
             </div>
 
             {/* Priority Filter */}
@@ -399,83 +480,79 @@ const TasksList: React.FC = () => {
                   onClick={() => navigateToTaskDetail(task.id)}
                   className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer hover:border-blue-300"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    {/* Left Content */}
-                    <div className="flex-1">
-                      <div className="flex items-start gap-3 mb-2">
-                        <span className="text-2xl font-bold text-gray-400">{task.order}</span>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="text-lg font-semibold text-gray-900">{task.title}</h3>
-                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-semibold">
-                              {getDisplayId(projectId, stageId, task.id)}
-                            </span>
+                  <div className="flex flex-col gap-4">
+                    {/* Header with title and hours */}
+                    <div className="flex items-start justify-between gap-4">
+                      {/* Left Content */}
+                      <div className="flex-1">
+                        <div className="flex items-start gap-3 mb-2">
+                          <span className="text-2xl font-bold text-gray-400">{task.order}</span>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="text-lg font-semibold text-gray-900">{task.title}</h3>
+                              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-semibold">
+                                {getDisplayId(projectId, stageId, task.id)}
+                              </span>
+                            </div>
+                            {task.description && (
+                              <p className="text-sm text-gray-600 line-clamp-1">
+                                {task.description}
+                              </p>
+                            )}
                           </div>
-                          {task.description && (
-                            <p className="text-sm text-gray-600 line-clamp-1">
-                              {task.description}
-                            </p>
-                          )}
                         </div>
                       </div>
 
-                      {/* Task Info */}
-                      <div className="flex flex-wrap gap-2 items-center mt-3">
-                        <span
-                          className={`px-2 py-1 rounded text-xs font-medium text-white`}
-                          style={{
-                            backgroundColor:
-                              getStatusColor(task.status) === 'blue'
-                                ? '#3b82f6'
-                                : getStatusColor(task.status) === 'yellow'
-                                ? '#eab308'
-                                : getStatusColor(task.status) === 'purple'
-                                ? '#a855f7'
-                                : getStatusColor(task.status) === 'green'
-                                ? '#22c55e'
-                                : '#ef4444',
-                          }}
-                        >
-                          {STATUS_LABELS[task.status]}
-                        </span>
-
-                        <span
-                          className={`px-2 py-1 rounded text-xs font-medium text-white`}
-                          style={{
-                            backgroundColor:
-                              getPriorityColor(task.priority) === 'gray'
-                                ? '#6b7280'
-                                : getPriorityColor(task.priority) === 'blue'
-                                ? '#3b82f6'
-                                : '#ef4444',
-                          }}
-                        >
-                          {PRIORITY_LABELS[task.priority as keyof typeof PRIORITY_LABELS]}
-                        </span>
-
-                        {riskIndicator && (
-                          <span className="text-sm font-medium text-gray-700">
-                            {riskIndicator.color} {riskIndicator.text}
-                          </span>
+                      {/* Right Content - Hours */}
+                      <div className="text-right whitespace-nowrap">
+                        <div className="mb-3">
+                          <p className="text-xs text-gray-600">Horas Estimadas</p>
+                          <p className="text-2xl font-bold text-gray-900">
+                            {task.estimated_hours}h
+                          </p>
+                        </div>
+                        {task.daily_hours && (
+                          <div>
+                            <p className="text-xs text-gray-600">Horas/Dia</p>
+                            <p className="text-lg font-semibold text-blue-600">
+                              {task.daily_hours}h
+                            </p>
+                          </div>
                         )}
                       </div>
                     </div>
 
-                    {/* Right Content */}
-                    <div className="text-right whitespace-nowrap">
-                      <div className="mb-3">
-                        <p className="text-xs text-gray-600">Horas Estimadas</p>
-                        <p className="text-2xl font-bold text-gray-900">
-                          {task.estimated_hours}h
-                        </p>
-                      </div>
-                      {task.daily_hours && (
-                        <div>
-                          <p className="text-xs text-gray-600">Horas/Dia</p>
-                          <p className="text-lg font-semibold text-blue-600">
-                            {task.daily_hours}h
-                          </p>
-                        </div>
+                    {/* Status Change Buttons and Info */}
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenStatusModal(task);
+                        }}
+                        className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-all ${getTaskStatusBadgeColor(task.status)}`}
+                      >
+                        {STATUS_LABELS[task.status]}
+                      </button>
+
+                      {/* Priority and Risk Info */}
+                      <span
+                        className={`px-2 py-1 rounded text-xs font-medium text-white ml-auto`}
+                        style={{
+                          backgroundColor:
+                            getPriorityColor(task.priority) === 'gray'
+                              ? '#6b7280'
+                              : getPriorityColor(task.priority) === 'blue'
+                              ? '#3b82f6'
+                              : '#ef4444',
+                        }}
+                      >
+                        {PRIORITY_LABELS[task.priority as keyof typeof PRIORITY_LABELS]}
+                      </span>
+
+                      {riskIndicator && (
+                        <span className="text-sm font-medium text-gray-700">
+                          {riskIndicator.color} {riskIndicator.text}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -630,6 +707,18 @@ const TasksList: React.FC = () => {
           isOpen={isCreateModalOpen}
           onClose={() => setIsCreateModalOpen(false)}
           onSuccess={handleCreateTaskSuccess}
+        />
+      )}
+
+      {/* Modal para alterar status da tarefa */}
+      {selectedTaskForStatus && (
+        <UpdateTaskStatusModal
+          taskId={selectedTaskForStatus.id}
+          taskTitle={selectedTaskForStatus.title}
+          currentStatus={selectedTaskForStatus.status}
+          isOpen={statusModalOpen}
+          onClose={handleStatusModalClose}
+          onSuccess={handleStatusModalSuccess}
         />
       )}
     </div>

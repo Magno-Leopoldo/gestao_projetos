@@ -61,6 +61,43 @@ export function validateStatusTransition(userRole, fromStatus, toStatus) {
   };
 }
 
+// Validar transição de status para TAREFAS (permite transições livres entre os 4 status)
+export function validateTaskStatusTransition(userRole, fromStatus, toStatus) {
+  // Para tarefas, permitir movimento livre entre todos os status
+  const allowedStatuses = ['novo', 'em_desenvolvimento', 'concluido', 'refaca'];
+
+  // Validar que os status são válidos
+  if (!allowedStatuses.includes(fromStatus) || !allowedStatuses.includes(toStatus)) {
+    return {
+      is_valid: false,
+      from_status: fromStatus,
+      to_status: toStatus,
+      user_role: userRole,
+      reason: `Status inválido: '${fromStatus}' ou '${toStatus}' não são status válidos para tarefas`,
+    };
+  }
+
+  // Se o status de origem e destino são iguais, não permitir
+  if (fromStatus === toStatus) {
+    return {
+      is_valid: false,
+      from_status: fromStatus,
+      to_status: toStatus,
+      user_role: userRole,
+      reason: 'A tarefa já está neste status',
+    };
+  }
+
+  // Permitir transição para todos os roles
+  return {
+    is_valid: true,
+    from_status: fromStatus,
+    to_status: toStatus,
+    user_role: userRole,
+    reason: null,
+  };
+}
+
 // Buscar breakdown de horas por tarefa
 export async function getTaskHoursBreakdown(userId) {
   const tasks = await query(

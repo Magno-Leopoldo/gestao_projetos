@@ -189,10 +189,10 @@ export default function Kanban() {
 
       {/* Kanban Board */}
       <div className="flex-1 overflow-hidden">
-        <div className="px-3 py-4 sm:px-6 md:px-8 md:py-8 h-full flex flex-col">
+        <div className="px-1 sm:px-2 md:px-3 py-4 md:py-8 h-full flex flex-col w-full">
           {/* Desktop View */}
           <div className="hidden lg:flex flex-1 overflow-hidden">
-            <div className="flex gap-4 xl:gap-6 w-full">
+            <div className="flex gap-2 xl:gap-3 w-full">
               {columns.map((column) => {
                 const columnProjects = getProjectsByKanbanStatus(column.kanban_status);
 

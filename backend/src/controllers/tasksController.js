@@ -4,6 +4,7 @@ import {
   validateUserDailyHours,
   validateUserDailyHoursWithWarning,
   validateStatusTransition,
+  validateTaskStatusTransition,
   getTaskHoursBreakdown,
   validateTaskDependencies,
   validateAssignmentWithDependencies,
@@ -703,8 +704,8 @@ export const updateTaskStatus = async (req, res, next) => {
       });
     }
 
-    // Validar transição de status
-    const validation = validateStatusTransition(role, task.status, status);
+    // Validar transição de status para tarefas
+    const validation = validateTaskStatusTransition(role, task.status, status);
 
     if (!validation.is_valid) {
       return res.status(403).json({

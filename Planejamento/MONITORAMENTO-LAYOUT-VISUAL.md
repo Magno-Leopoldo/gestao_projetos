@@ -17,23 +17,54 @@ Implementar uma tela de **Monitoramento profunda** com análises detalhadas de:
 
 ---
 
+## 🔐 Acesso & Público-Alvo
+
+### **Quem Acessa?**
+- ✅ **Admin da Empresa**
+- ✅ **Donos/Proprietários**
+- ❌ **Supervisores** (NÃO têm acesso)
+- ❌ **Usuários comuns** (NÃO têm acesso)
+
+### **Propósito Principal**
+🎯 **Avaliação de Desempenho e Gestão Executiva**
+- Visão GERAL da saúde do projeto
+- Avaliação de SUPERVISORES (essencial!)
+- Análise de desempenho POR PESSOA/SUPERVISOR
+- Tomada de decisão estratégica
+
+### **Contexto Crítico**
+> Esta é uma tela de **gestão e controle**, não de operação. Admin/Donos usam para:
+> 1. Avaliar se supervisores estão fazendo bom trabalho
+> 2. Identificar gargalos na equipe
+> 3. Analisar padrões de trabalho
+> 4. Tomar decisões sobre alocação de recursos
+
+---
+
 ## 📐 Estrutura de Seções (11 no total)
 
 ### 1️⃣ Filtros & Período (Top - 3 colunas)
 
 ```
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ 📅 PERÍODO                 ┃ 👤 FILTRAR USUÁRIO        ┃ 📊 FILTRAR STATUS         ┃
+┃ 📅 PERÍODO                 ┃ 👤 FILTRAR SUPERVISOR     ┃ 📊 FILTRAR STATUS         ┃
 ┃ [De: 01/02] [Até: 03/02]  ┃ [Todos ▼]                 ┃ ☑ Novo ☑ Em Desenv        ┃
-┃ [7 Últimos Dias] [Mês]     ┃ [Maria Santos]            ┃ ☑ Análise ☑ Concluído     ┃
-┃                            ┃ [João Silva]              ┃ ☑ Refaça                  ┃
+┃ [7 Últimos Dias] [Mês]     ┃ [Maria Silva]             ┃ ☑ Análise ☑ Concluído     ┃
+┃                            ┃ [João Santos]             ┃ ☑ Refaça                  ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 ```
 
 **Funcionalidades:**
 - ✅ Seletor de período (7 dias, mês, intervalo customizável)
-- ✅ Dropdown de usuários (filtro por responsável)
+- ✅ Dropdown de SUPERVISORES (filtro por supervisor para avaliação)
+  - **IMPORTANTE:** Lista APENAS supervisores, não usuários comuns
+  - Objetivo: Admin avalia desempenho de cada supervisor
 - ✅ Checkboxes de status (multiselect)
+
+**Comportamento:**
+- Quando seleciona "Maria Silva" (supervisor) → mostra dados/tarefas/equipe DESSA supervisora
+- Todas as 10 seções abaixo são filtradas por esse supervisor
+- Permite comparação de desempenho entre supervisores
 
 ---
 
@@ -440,36 +471,328 @@ RECOMENDAÇÕES:
 
 ---
 
-## 🚀 Ordem de Implementação
+## ✅ **DECISÃO FINAL - 9 SEÇÕES CONFIRMADAS**
 
-1. Estrutura base (header + filtros)
-2. Desempenho dos Supervisores (3 cards)
-3. Carga de Trabalho (tabela)
-4. Histórico de Atribuições (tabela)
-5. Análise de Atribuições (gráficos)
-6. Tarefas em Risco (tabela)
-7. Horas Rastreadas (gráfico)
-8. Top Tarefas (lista)
-9. Distribuição + Ranking (lado a lado)
-10. Análise de Projetos (tabela)
-11. Indicadores & Recomendações (cards)
+**Seções que SERÃO Implementadas:**
+1. ✅ Filtros & Período
+2. ✅ Desempenho dos Supervisores
+3. ✅ Carga de Trabalho da Equipe
+4. ✅ Histórico de Atribuições
+5. ✅ Análise de Atribuições
+6. ✅ Tarefas em Risco
+7. ✅ Horas Rastreadas
+8. ✅ Top 5 Tarefas por Horas
+9. ✅ Distribuição de Status + Ranking
+
+**Seções Removidas (Decisão do Usuário):**
+- ❌ Análise de Projetos - Redundante com outras seções
+- ❌ Indicadores de Saúde - Resumo muito extra
+
+**Princípio de Implementação:**
+- ✅ Usar dados JÁ EXISTENTES no sistema
+- ✅ NÃO criar novos endpoints/dados
+- ✅ Implementar etapa por etapa
+- ✅ Validar cada seção após implementação
+
+---
+
+## 🎯 **PLANO DE AÇÃO - Ordem de Implementação**
+
+### **FASE 1: Base (Seções 1)**
+1. Seção 1: Filtros & Período (base para tudo)
+   - Setup da página Monitoring.tsx
+   - Sistema de filtros funcional
+
+### **FASE 2: Supervisores (Seção 2)**
+2. Seção 2: Desempenho dos Supervisores
+   - Cálculos de métricas por supervisor
+   - Cards com dados dinâmicos
+
+### **FASE 3: Equipe & Carga (Seção 3)**
+3. Seção 3: Carga de Trabalho da Equipe
+   - Tabela com filtro por supervisor
+   - Ordenação por status
+
+### **FASE 4: Histórico & Análises (Seções 4-5)**
+4. Seção 4: Histórico de Atribuições
+   - Paginação + timeline
+5. Seção 5: Análise de Atribuições (gráficos)
+
+### **FASE 5: Risco & Performance (Seções 6-7)**
+6. Seção 6: Tarefas em Risco
+   - Ordenação por criticidade
+7. Seção 7: Horas Rastreadas (gráfico)
+
+### **FASE 6: Ranking & Finalização (Seções 8-9)**
+8. Seção 8: Top 5 Tarefas
+9. Seção 9: Distribuição + Ranking
+   - Testes e ajustes finais
 
 ---
 
 ## ✅ Checklist de Implementação
 
-- [ ] Componente Monitoring.tsx reescrito
-- [ ] 11 seções implementadas
-- [ ] Filtros funcionando
-- [ ] Gráficos renderizando
-- [ ] Tabelas com dados reais
+- [ ] Componente Monitoring.tsx criado
+- [ ] Seção 1 (Filtros) - implementada e validada
+- [ ] Seção 2 (Supervisores) - implementada e validada
+- [ ] Seção 3 (Carga Trabalho) - implementada e validada
+- [ ] Seção 4 (Histórico) - implementada e validada
+- [ ] Seção 5 (Análise Atribuições) - implementada e validada
+- [ ] Seção 6 (Tarefas Risco) - implementada e validada
+- [ ] Seção 7 (Horas Rastreadas) - implementada e validada
+- [ ] Seção 8 (Top 5 Tarefas) - implementada e validada
+- [ ] Seção 9 (Distribuição + Ranking) - implementada e validada
 - [ ] Responsividade testada
 - [ ] Performance otimizada
 - [ ] Cores e styling consistentes
 - [ ] Dados em tempo real
 - [ ] Documentação atualizada
+- [ ] Acesso restrito (apenas Admin/Donos)
 
 ---
 
 **Data de Criação:** 2026-02-03
+**Atualizado:** 2026-02-04 - Validação com usuário sobre acesso e público-alvo
+
+---
+
+## 📌 Decisões de Design (Conversa com Usuário - 2026-02-04)
+
+### **Decisão 1: Público-Alvo Exclusivo**
+- ✅ **CONFIRMADO:** Apenas Admin/Donos acessam
+- ✅ **CONFIRMADO:** Supervisores NÃO têm acesso
+- **Motivo:** É uma ferramenta de avaliação de supervisores (não pode ser vista por eles)
+
+### **Decisão 2: Filtro de Usuário → Supervisor**
+- ✅ **CONFIRMADO:** Filtro deve linkar a SUPERVISORES
+- ❌ **DESCARTADO:** Não lista usuários comuns
+- **Motivo:** Admin quer avaliar cada supervisor individualmente
+- **Comportamento:** Ao filtrar "Maria Silva", mostra desempenho/equipe/tarefas DELA
+
+### **Decisão 3: Importância da Avaliação**
+- ✅ **CRÍTICA:** Avaliação por pessoa/supervisor é "de extrema importância"
+- ✅ **CRÍTICA:** Avaliação geral TAMBÉM é importante
+- **Implicação:** Filtro "Todos" precisa mostrar visão geral; filtro individual para análise profunda
+
+### **Seção 2: Desempenho dos Supervisores**
+
+**Decisão 1: Comportamento com Filtro**
+- ✅ **CONFIRMADO:** Quando filtrar por supervisor específico → mostra APENAS esse supervisor com detalhes profundos
+- Se filtrar "Maria Silva" → card grande com dados DELA
+- Se deixar "Todos" → mostra 3 cards (🥇🥈🥉)
+
+**Decisão 2: Campos Mantidos**
+- ✅ Rating/Estrelas
+- ✅ Projetos (total + ativos)
+- ✅ Taxa de Conclusão
+- ✅ Tarefas (total + concluídas + refaça)
+- ✅ Tamanho da Equipe
+- ✅ Atribuições/Semana
+- ❌ Atribuições/Dia (removido - "trabalhoso")
+- ✅ Taxa Refaça ("bom ter")
+- ✅ Horas Médias (mantém)
+- ✅ Status Visual
+- ✅ Ação Recomendada
+
+**Decisão 3: Periodicidade (Opção A)**
+- ✅ **CONFIRMADO:** Dados MUDAM com filtro de período
+- Exemplo: Filtro "Período = Janeiro" → mostra dados de JANEIRO
+- Permite análise histórica: "Como foi a Maria em janeiro vs fevereiro?"
+- Taxa, tarefas, atribuições, etc. são recalculadas baseado no período selecionado
+
+### **Seção 3: Carga de Trabalho da Equipe**
+
+**Decisão 1: Filtro de Supervisor**
+- ✅ **CONFIRMADO:** Quando filtrar "Maria Silva" → mostra APENAS pessoas atribuídas aos projetos dela
+- Tabela dinâmica baseada no filtro do supervisor
+
+**Decisão 2: Colunas Mantidas**
+- ✅ MEMBRO (nome + tempo na empresa)
+- ✅ SUPERVISOR (quem gerencia)
+- ✅ ALOCADO (horas planejadas / limite %)
+- ✅ RASTREADO (horas reais trabalhadas %)
+- ✅ DIFERENÇA (alocado - rastreado %)
+- ✅ PROJETOS (quantidade ativa)
+- ✅ TAXA / STATUS (% conclusão + visual)
+
+**Decisão 3: Ordenação**
+- ✅ **CONFIRMADO - Opção B:** Por Status (Crítico → Bom)
+- Lógica: 🔴 Crítico > 🟡 Atenção > 🟢 Bom
+- **Resultado:** Problemas aparecem no topo, Admin vê urgências logo de cara
+- **Vantagem:** Intuição visual com cores, não depende de números
+
+### **Seção 4: Histórico de Atribuições**
+
+**Decisão 1: Filtros Aplicados**
+- ✅ **CONFIRMADO:** Período = "Janeiro" → mostra APENAS atribuições de janeiro
+- ✅ **CONFIRMADO:** Supervisor = "Maria Silva" → mostra APENAS atribuições DELA
+- ✅ **CONFIRMADO:** Status = "Concluído" → mostra APENAS tarefas concluídas
+- **Resultado:** Tabela é totalmente dinâmica baseada em todos os filtros
+
+**Decisão 2: Colunas Mantidas**
+- ✅ TIMESTAMP (relativo: "10 min atrás", "Ontem 16:45")
+- ✅ USUÁRIO (atribuído + supervisor)
+- ✅ TAREFA + PROJETO
+- ✅ HORAS (alocadas)
+- ✅ STATUS + PROGRESSO
+- ❌ Sem colunas adicionais (Prioridade, Risco, Dedicação diária não necessárias)
+
+**Decisão 3: Ordenação**
+- ✅ **CONFIRMADO:** Sempre "Mais recente primeiro"
+- Ordem: 10 min atrás → Ontem → Semana passada → Mais antigo
+- **NÃO configurável** - padrão fixo
+
+**Estatísticas no Topo:**
+- Total de atribuições (período inteiro)
+- Atribuições hoje
+- Atribuições esta semana
+- Atribuições este mês
+
+**Paginação:**
+- 15 itens por página
+- Botão "Mostrar Mais" para lazy load
+
+### **Seção 5: Análise de Atribuições**
+
+**Decisão 1: Filtros Aplicados**
+- ✅ **CONFIRMADO:** Supervisor = "Maria Silva" → mostra gráficos DELA (sua equipe, seus projetos)
+- ✅ **CONFIRMADO:** Período = "Janeiro" → mostra padrões APENAS de janeiro (não mistura com outros meses)
+- ✅ **CONFIRMADO:** Status = "Concluído" → mostra APENAS horas de tarefas concluídas
+- **Princípio:** Ao filtrar, TUDO respeita o filtro. Não mistura períodos, supervisores ou status.
+
+**Coluna Esquerda - Gráficos de Distribuição:**
+- Atribuições por Usuário (período filtrado)
+- Atribuições por Supervisor (período filtrado)
+- Média por Dia
+- Peak (dia com mais atribuições)
+- Low (dia com menos atribuições)
+
+**Coluna Direita - Padrões de Horas:**
+- Distribuição de Horas (1-3h, 3-6h, 6-8h)
+- Média por atribuição
+- Moda (frequência mais comum)
+- Mediana
+- Taxa de Erro (% de ajustes necessários)
+- Tendência (gráfico de linha ao longo da semana)
+
+**Importância:** ✅ Seção mantida - boa análise de padrões
+
+### **Seção 6: Tarefas em Risco**
+
+**Decisão 1: Filtros Aplicados**
+- ✅ **CONFIRMADO:** Período = "Janeiro" → mostra APENAS tarefas em risco de janeiro
+- ✅ **CONFIRMADO:** Supervisor = "Maria Silva" → mostra APENAS tarefas dela em risco
+- ✅ **CONFIRMADO:** Status = "Concluído" → tabela DESAPARECE (tarefas concluídas não estão em risco)
+- **Comportamento:** Tabela é dinâmica e desaparece se não há riscos no filtro selecionado
+
+**Colunas:**
+- Ranking (#) - ordem de criticidade
+- Status Visual (🔴 Crítico / 🟠 Risco / 🟡 Aviso)
+- Tarefa + Projeto
+- Supervisor responsável
+- Responsável pela execução
+- Dias Atrasados (negativo = atrasado)
+- Ação Recomendada (CRÍTICO!)
+
+**Decisão 2: Ordenação**
+- ✅ **CONFIRMADO:** Por Risco (Crítico 🔴 → Risco 🟠 → Aviso 🟡)
+- **Resultado:** Piores problemas aparecem no topo logo
+
+**Decisão 3: Ação Recomendada**
+- ✅ **CONFIRMADO:** Essencial - ajuda Admin com ênfase nos alertas
+- Exemplos:
+  - 🔴 Crítico: "AÇÃO IMEDIATA: Aumentar equipe / Estender prazo"
+  - 🟠 Risco: "Verificar progresso / Revisar escopo"
+  - 🟡 Aviso: "Monitorar closely / Preparar contingência"
+
+### **Seção 7: Horas Rastreadas**
+
+**Decisão 1: Filtros Aplicados**
+- ✅ **CONFIRMADO:** Período = "Janeiro" → mostra gráfico de JANEIRO (todos os 31 dias)
+- ✅ **CONFIRMADO:** Supervisor = "Maria Silva" → mostra horas rastreadas DELA (+ sua equipe atrelada aos projetos)
+- ✅ **CONFIRMADO:** Status = "Concluído" → mostra APENAS horas de tarefas concluídas
+- **Comportamento:** Gráfico varia conforme período (7 dias, 31 dias, intervalo customizado)
+
+**Gráfico:**
+- Linha temporal mostrando horas por dia
+- X: Dias da semana/mês
+- Y: Horas trabalhadas
+
+**Decisão 2: Estatísticas Simplificadas (Essenciais)**
+- ✅ Total: Horas totais no período
+- ✅ Média: Horas por dia
+- ✅ Peak: Dia com mais horas (com identificação do dia)
+- ✅ Low: Dia com menos horas (com identificação do dia)
+- ✅ **Eficiência (%):** Horas rastreadas vs horas alocadas - DESTAQUE VISUAL! (Crítico)
+- ❌ Removido: Tendência vs semana anterior (extra/simplificado)
+- ❌ Removido: Desvio padrão (técnico demais)
+
+### **Seção 8: Top 5 Tarefas por Horas**
+
+**Decisão 1: Filtros Aplicados**
+- ✅ **CONFIRMADO:** Supervisor = "Maria Silva" → mostra TOP 5 DELA (tarefas que ela/sua equipe mais trabalhou)
+  - Nota: Equipe = quem está atribuído nos projetos/tarefas dela
+- ✅ **CONFIRMADO:** Período = "Janeiro" → mostra TOP 5 de janeiro
+- ✅ **CONFIRMADO:** Status = "Concluído" → mostra TOP 5 das tarefas concluídas
+
+**Decisão 2: Informações Mantidas (Simplificadas)**
+- ✅ Ranking (#) com horas totais
+- ✅ Tarefa + Projeto
+- ✅ Responsável (👤)
+- ✅ Progresso (%)
+- ✅ Horas Hoje (atividade recente)
+- ❌ Removido: Status Visual (redundante com progresso)
+- ❌ Removido: Prioridade (menos relevante)
+
+**Decisão 3: "Total Top 5" - Mantido**
+- ✅ **CONFIRMADO - Opção A:** Mostrar "Total Top 5: 24.8h (33% do total semana)"
+- **Função:** Ajuda Admin entender se trabalho está concentrado (80%) ou distribuído (30%)
+- **Insight:** Permite avaliar balanceamento da equipe
+
+### **Seção 9: Distribuição de Status + Ranking**
+
+**Decisão 1: Filtros Aplicados**
+- ✅ **CONFIRMADO:** Supervisor = "Maria Silva" → mostra distribuição DELA + ranking de sua equipe (boa visualização)
+- ✅ **CONFIRMADO:** Período = "Janeiro" → mostra dados overall ou por usuário de janeiro
+- ❌ **Status NÃO afeta:** Essa seção mostra TODOS os status (distribuição seria inútil com só 1 status)
+- **Filtros ativos:** Apenas Período + Supervisor
+
+**Coluna Esquerda - Distribuição de Status:**
+- Gráfico de barras: Novo, Em Desenvolvimento, Análise, Concluído, Refaça
+- Percentual + quantidade (15%, 44%, 11%, 58%, 7%)
+- Total de tarefas
+- Taxa Global de Conclusão
+- Média de refaça por projeto
+- Performance por Supervisor (% de conclusão)
+
+**Coluna Direita - Ranking (Top 5 Usuários)**
+- ✅ Opção A + B JUNTAS:
+  - % de Conclusão (95%, 92%, 85%) - métrica OBJETIVA
+  - ⭐ Estrelas (calculadas automaticamente, não subjetivas)
+  - Tarefas: total ✓ | % ⚠️
+  - Horas (contexto)
+  - Tempo na empresa
+- ❌ Removido: Trending (simplificar, já está visual nas estrelas)
+
+**Cálculo de Estrelas (Automático):**
+- 95%+ → ⭐⭐⭐⭐⭐
+- 80-94% → ⭐⭐⭐⭐☆
+- 60-79% → ⭐⭐⭐☆☆
+- 40-59% → ⭐⭐☆☆☆
+- <40% → ⭐☆☆☆☆
+
+### **Próximos Passos:**
+1. ✅ Seção 1 (Filtros) - FINALIZADA
+2. ✅ Seção 2 (Desempenho dos Supervisores) - FINALIZADA
+3. ✅ Seção 3 (Carga de Trabalho da Equipe) - FINALIZADA
+4. ✅ Seção 4 (Histórico de Atribuições) - FINALIZADA
+5. ✅ Seção 5 (Análise de Atribuições) - FINALIZADA
+6. ✅ Seção 6 (Tarefas em Risco) - FINALIZADA
+7. ✅ Seção 7 (Horas Rastreadas) - FINALIZADA
+8. ✅ Seção 8 (Top 5 Tarefas por Horas) - FINALIZADA
+9. ✅ Seção 9 (Distribuição de Status + Ranking) - FINALIZADA
+10. ⏳ Seção 10 (Análise de Projetos) - Próxima análise
+
+---
+
 **Próximos Passos:** Validação com usuário e implementação iterativa
