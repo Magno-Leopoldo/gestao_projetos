@@ -32,6 +32,7 @@ export default function Kanban() {
   const [projects, setProjects] = useState<ProjectWithProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [draggedProject, setDraggedProject] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'full' | 'compact'>('full');
 
   useEffect(() => {
     loadProjects();
@@ -166,17 +167,20 @@ export default function Kanban() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
-        <div className="px-6 py-4 sm:px-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-2">
-                📊 Kanban de Projetos
+        <div className="px-4 py-3 sm:px-6 md:px-8">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1">
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-2">
+                📊 <span className="hidden sm:inline">Kanban de</span> Projetos
               </h1>
-              <p className="text-sm sm:text-base text-gray-600 mt-1">Visualize e gerencie o fluxo completo de seus projetos</p>
+              <p className="text-xs sm:text-sm md:text-base text-gray-600 mt-1">
+                <span className="hidden sm:inline">Visualize e gerencie o fluxo completo de seus</span>
+                <span className="sm:hidden">Fluxo de</span> projetos
+              </p>
             </div>
-            <div className="hidden sm:flex items-center gap-2 text-sm text-gray-600">
-              <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full font-medium">
-                {projects.length} projeto{projects.length !== 1 ? 's' : ''}
+            <div className="flex items-center gap-2">
+              <span className="px-2 sm:px-3 py-1 bg-blue-50 text-blue-700 rounded-full font-medium text-xs sm:text-sm">
+                {projects.length}
               </span>
             </div>
           </div>
@@ -185,31 +189,33 @@ export default function Kanban() {
 
       {/* Kanban Board */}
       <div className="overflow-x-auto">
-        <div className="px-6 py-8 sm:px-8">
-        <div className="flex gap-6 min-w-max">
-          {columns.map((column) => {
-            const columnProjects = getProjectsByKanbanStatus(column.kanban_status);
+        <div className="px-3 py-4 sm:px-6 md:px-8 md:py-8">
+          {/* Desktop View */}
+          <div className="hidden lg:block">
+            <div className="flex gap-4 xl:gap-6 min-w-max">
+              {columns.map((column) => {
+                const columnProjects = getProjectsByKanbanStatus(column.kanban_status);
 
-            return (
-              <div
-                key={column.id}
-                onDrop={() => handleDrop(column.kanban_status)}
-                onDragOver={handleDragOver}
-                className={`${column.color} rounded-2xl border border-opacity-50 backdrop-blur-sm p-5 w-96 flex-shrink-0 flex flex-col bg-opacity-60 shadow-sm hover:shadow-md transition-shadow`}
-              >
-                {/* Column Header */}
-                <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 border-opacity-50">
-                  <div>
-                    <h2 className="font-bold text-gray-900 text-lg">{column.title}</h2>
-                    <p className="text-xs text-gray-600 mt-0.5">{columnProjects.length} projeto{columnProjects.length !== 1 ? 's' : ''}</p>
-                  </div>
-                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white shadow-sm font-semibold text-gray-700 text-sm">
-                    {columnProjects.length}
-                  </div>
-                </div>
+                return (
+                  <div
+                    key={column.id}
+                    onDrop={() => handleDrop(column.kanban_status)}
+                    onDragOver={handleDragOver}
+                    className={`${column.color} rounded-2xl border border-opacity-50 backdrop-blur-sm p-5 w-80 xl:w-96 flex-shrink-0 flex flex-col bg-opacity-60 shadow-sm hover:shadow-md transition-shadow`}
+                  >
+                    {/* Column Header */}
+                    <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 border-opacity-50">
+                      <div>
+                        <h2 className="font-bold text-gray-900 text-base xl:text-lg">{column.title}</h2>
+                        <p className="text-xs text-gray-600 mt-0.5">{columnProjects.length} proj{columnProjects.length !== 1 ? 's' : ''}</p>
+                      </div>
+                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white shadow-sm font-semibold text-gray-700 text-sm">
+                        {columnProjects.length}
+                      </div>
+                    </div>
 
-                {/* Projects Container */}
-                <div className="flex-1 space-y-4 overflow-y-auto pr-3" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+                    {/* Projects Container */}
+                    <div className="flex-1 space-y-3 xl:space-y-4 overflow-y-auto pr-3" style={{ maxHeight: 'calc(100vh - 280px)' }}>
                   {columnProjects.map((project) => (
                     <div
                       key={project.id}
@@ -310,19 +316,131 @@ export default function Kanban() {
                   ))}
                 </div>
 
-                {/* Empty State */}
-                {columnProjects.length === 0 && (
-                  <div className="flex items-center justify-center py-12 text-center">
-                    <div className="text-gray-400">
-                      <div className="text-3xl mb-2">📭</div>
-                      <p className="text-sm font-medium">Nenhum projeto aqui</p>
+                    {/* Empty State */}
+                    {columnProjects.length === 0 && (
+                      <div className="flex items-center justify-center py-12 text-center">
+                        <div className="text-gray-400">
+                          <div className="text-3xl mb-2">📭</div>
+                          <p className="text-sm font-medium">Nenhum projeto</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Mobile/Tablet View - Grid 2 colunas */}
+          <div className="lg:hidden">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+              {columns.map((column) => {
+                const columnProjects = getProjectsByKanbanStatus(column.kanban_status);
+
+                return (
+                  <div
+                    key={column.id}
+                    onDrop={() => handleDrop(column.kanban_status)}
+                    onDragOver={handleDragOver}
+                    className={`${column.color} rounded-2xl border border-opacity-50 backdrop-blur-sm p-4 sm:p-5 flex flex-col bg-opacity-60 shadow-sm`}
+                  >
+                    {/* Column Header */}
+                    <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200 border-opacity-50">
+                      <div>
+                        <h2 className="font-bold text-gray-900 text-base">{column.title}</h2>
+                        <p className="text-xs text-gray-600 mt-0.5">{columnProjects.length} proj{columnProjects.length !== 1 ? 's' : ''}</p>
+                      </div>
+                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white shadow-sm font-semibold text-gray-700 text-sm">
+                        {columnProjects.length}
+                      </div>
+                    </div>
+
+                    {/* Projects Container */}
+                    <div className="flex-1 space-y-3 overflow-y-auto pr-2" style={{ maxHeight: '50vh' }}>
+                      {columnProjects.map((project) => (
+                        <div
+                          key={project.id}
+                          draggable
+                          onDragStart={() => handleDragStart(project.id)}
+                          className={`bg-white rounded-xl shadow-sm hover:shadow-lg border-2 transition-all p-3 ${
+                            project.kanban_status === 'refaca'
+                              ? 'border-red-300 hover:border-red-400'
+                              : 'border-gray-200 hover:border-blue-300'
+                          } ${draggedProject === project.id ? 'opacity-50 ring-2 ring-blue-400' : ''}`}
+                        >
+                          {/* Project Title & Status Badge */}
+                          <div className="flex items-start justify-between mb-2 gap-2">
+                            <h3 className="font-bold text-gray-900 text-sm flex-1 leading-snug pr-1">
+                              {project.name}
+                            </h3>
+                            {project.kanban_status === 'refaca' && (
+                              <div className="flex-shrink-0 bg-red-100 rounded-full p-1">
+                                <AlertCircle className="w-3 h-3 text-red-600" />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Progress Bar */}
+                          <div className="mb-3">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-semibold text-gray-700">Progresso</span>
+                              <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+                                project.progress_percentage === 100 ? 'bg-green-100 text-green-700' :
+                                project.progress_percentage >= 60 ? 'bg-blue-100 text-blue-700' :
+                                project.progress_percentage >= 30 ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-red-100 text-red-700'
+                              }`}>
+                                {project.progress_percentage}%
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-300 rounded-full h-2">
+                              <div
+                                className={`h-2 rounded-full transition-all ${
+                                  project.progress_percentage === 100 ? 'bg-green-500' :
+                                  project.progress_percentage >= 60 ? 'bg-blue-500' :
+                                  project.progress_percentage >= 30 ? 'bg-yellow-500' :
+                                  'bg-red-500'
+                                }`}
+                                style={{ width: `${project.progress_percentage}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Tasks */}
+                          <div className="bg-gray-50 rounded-lg p-2 mb-2 border border-gray-200 text-center">
+                            <span className="text-sm font-bold text-gray-900">
+                              {project.completed_tasks}/{project.total_tasks} tarefas
+                            </span>
+                          </div>
+
+                          {/* Risk */}
+                          <div className="text-center text-xs font-semibold">
+                            {project.progress_percentage >= 75 ? (
+                              <span className="text-green-600">🟢 Baixo</span>
+                            ) : project.progress_percentage >= 40 ? (
+                              <span className="text-yellow-600">🟡 Médio</span>
+                            ) : (
+                              <span className="text-red-600">🔴 Alto</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Empty State */}
+                      {columnProjects.length === 0 && (
+                        <div className="flex items-center justify-center py-8 text-center">
+                          <div className="text-gray-400">
+                            <div className="text-2xl mb-2">📭</div>
+                            <p className="text-xs font-medium">Vazio</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
     </div>
