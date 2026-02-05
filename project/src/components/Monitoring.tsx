@@ -374,8 +374,8 @@ export default function Monitoring() {
       // Calcular análise das atribuições
       await calculateAssignmentAnalysis(history);
 
-      // Carregar tarefas em risco
-      await loadRiskTasks();
+      // Carregar tarefas em risco (passar supervisorsList para evitar timing issues com state)
+      await loadRiskTasks(supervisorsList);
 
       // Calcular estatísticas de horas rastreadas
       await calculateTrackedHoursStats();
@@ -610,12 +610,14 @@ export default function Monitoring() {
     }
   }
 
-  async function loadRiskTasks() {
+  async function loadRiskTasks(supervisorsList?: Supervisor[]) {
     try {
       const tasks: RiskTask[] = [];
       const allProjects = await projectsService.getAll({ include: 'stages' });
       let supervisorsMap = new Map<number, Supervisor>();
-      supervisors.forEach((s) => supervisorsMap.set(s.id, s));
+      // Usar supervisorsList passado como parâmetro, ou fallback para state 'supervisors'
+      const supsToUse = supervisorsList || supervisors;
+      supsToUse.forEach((s) => supervisorsMap.set(s.id, s));
 
       // Determinar filtro de supervisor
       let filteredProjects = allProjects;
@@ -650,35 +652,57 @@ export default function Monitoring() {
                 }
               });
 
+              // Calcular daysOverdue real baseado em due_date
+              let daysOverdue = 0;
+              if (task.due_date) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0); // Zerar horas para comparação justa
+                const dueDate = new Date(task.due_date);
+                dueDate.setHours(0, 0, 0, 0);
+                const diffTime = today.getTime() - dueDate.getTime();
+                daysOverdue = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                // daysOverdue positivo = atrasado
+                // daysOverdue negativo = ainda tem tempo
+              }
+
               // Determinar nível de risco
               let riskLevel: 'critical' | 'high' | 'medium' = 'medium';
               let riskReason = '';
-              let daysOverdue = 0;
 
-              // Critério 1: Progresso muito lento (< 30% com múltiplas atribuições)
-              if (progress < 30 && allocatedHours > 0) {
-                riskLevel = 'high';
-                riskReason = 'Progresso muito lento';
+              // Critério 1: Tarefa ATRASADA (devido_date passou)
+              if (daysOverdue > 0) {
+                riskLevel = 'critical';
+                riskReason = `Atrasada há ${daysOverdue} dia${daysOverdue > 1 ? 's' : ''}`;
               }
 
-              // Critério 2: Status "em_análise" sem progresso
-              if (task.status === 'analise_tecnica' && progress < 20) {
+              // Critério 2: Tarefa PRESTE A VENCER (menos de 2 dias)
+              else if (daysOverdue > -2 && daysOverdue <= 0) {
                 riskLevel = 'high';
-                riskReason = 'Análise técnica estagnada';
+                riskReason = `Vence em ${Math.abs(daysOverdue)} dia${Math.abs(daysOverdue) > 0 ? 's' : ''}`;
               }
 
-              // Critério 3: Tarefas com status "refaca" (requerem trabalho extra)
+              // Critério 3: Progresso muito lento (< 30% com múltiplas atribuições)
+              if (progress < 30 && allocatedHours > 0 && daysOverdue > -5) {
+                if (riskLevel === 'medium') riskLevel = 'high';
+                riskReason = riskReason ? `${riskReason} + Progresso muito lento` : 'Progresso muito lento (<30%)';
+              }
+
+              // Critério 4: Status "em_análise" sem progresso
+              if (task.status === 'analise_tecnica' && progress < 20 && daysOverdue > -5) {
+                if (riskLevel === 'medium') riskLevel = 'high';
+                riskReason = riskReason ? `${riskReason} + Análise técnica estagnada` : 'Análise técnica estagnada (<20%)';
+              }
+
+              // Critério 5: Tarefas com status "refaca" (requerem trabalho extra)
               if (task.status === 'refaca') {
                 riskLevel = 'critical';
                 riskReason = 'Requer refação';
-                daysOverdue = -2; // Simulação
               }
 
-              // Critério 4: Progresso 0% há muito tempo (múltiplas atribuições)
-              if (progress === 0 && allocatedHours >= 6) {
-                riskLevel = 'critical';
-                riskReason = 'Sem início de execução';
-                daysOverdue = -1;
+              // Critério 6: Progresso 0% com múltiplas atribuições
+              if (progress === 0 && allocatedHours >= 6 && daysOverdue > -5) {
+                if (riskLevel !== 'critical') riskLevel = 'high';
+                riskReason = riskReason ? `${riskReason} + Sem início de execução` : 'Sem início de execução (0%)';
               }
 
               // Apenas adicionar se em risco
@@ -702,9 +726,22 @@ export default function Monitoring() {
         }
       }
 
-      // Ordenar por criticidade
+      // Ordenar por criticidade: primeiro por nivel de risco, depois por dias atrasado, depois por progresso
       const riskOrder = { 'critical': 0, 'high': 1, 'medium': 2 };
-      tasks.sort((a, b) => riskOrder[a.risk_level] - riskOrder[b.risk_level]);
+      tasks.sort((a, b) => {
+        // 1. Ordenar por nível de risco
+        const riskDiff = riskOrder[a.risk_level] - riskOrder[b.risk_level];
+        if (riskDiff !== 0) return riskDiff;
+
+        // 2. Ordenar por urgência (tarefas mais atrasadas no topo)
+        // daysOverdue positivo = atrasado, maior número = mais urgente
+        if (a.days_overdue !== b.days_overdue) {
+          return b.days_overdue - a.days_overdue;
+        }
+
+        // 3. Se mesmo nível de atraso, ordenar por progresso (menor progresso = mais urgente)
+        return a.progress - b.progress;
+      });
 
       setRiskTasks(tasks);
     } catch (error) {
