@@ -830,6 +830,10 @@ export default function Monitoring() {
 
               // Processar cada tarefa para extrair informações de membros
               for (const task of tasks) {
+                // Contar apenas tarefas ativas (exigem interação)
+                const activeStatuses = ['novo', 'em_desenvolvimento', 'analise_tecnica', 'refaca'];
+                const isActiveTask = activeStatuses.includes(task.status);
+
                 // Verificar assignments_array ou assignees_array (ambos são usados)
                 const assignments = task.assignments_array || task.assignees_array || [];
 
@@ -859,8 +863,10 @@ export default function Monitoring() {
                   if (entry) {
                     // Somar horas alocadas
                     entry.allocated_hours += parseFloat(String(dailyHours)) || 0;
-                    // Contar tarefas atribuídas
-                    entry.active_projects += 1;
+                    // Contar apenas tarefas ativas (que exigem interação)
+                    if (isActiveTask) {
+                      entry.active_projects += 1;
+                    }
                   }
                 }
               }
