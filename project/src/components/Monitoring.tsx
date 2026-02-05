@@ -707,6 +707,24 @@ export default function Monitoring() {
 
               // Apenas adicionar se em risco
               if (riskLevel === 'critical' || riskLevel === 'high') {
+                // Calcular horas reais trabalhadas (tracked_hours)
+                let trackedHours = 0;
+                try {
+                  const sessionsResponse = await timeEntriesService.getTaskSessions(task.id);
+                  if (sessionsResponse && sessionsResponse.data) {
+                    trackedHours = sessionsResponse.data.reduce(
+                      (sum: number, session: any) => {
+                        const duration = session.duration_hours || 0;
+                        return sum + parseFloat(String(duration));
+                      },
+                      0
+                    );
+                  }
+                } catch (error) {
+                  console.warn(`Erro ao carregar horas rastreadas da tarefa ${task.id}:`, error);
+                  trackedHours = 0;
+                }
+
                 tasks.push({
                   id: task.id,
                   title: task.title,
@@ -715,7 +733,7 @@ export default function Monitoring() {
                   responsible_user: responsibleUser,
                   progress,
                   allocated_hours: allocatedHours,
-                  tracked_hours: 0, // Simplificado por enquanto
+                  tracked_hours: Math.round(trackedHours * 10) / 10, // Horas reais rastreadas
                   days_overdue: daysOverdue,
                   risk_level: riskLevel,
                   risk_reason: riskReason,
