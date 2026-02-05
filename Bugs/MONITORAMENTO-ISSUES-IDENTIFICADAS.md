@@ -189,3 +189,139 @@ Após análise profunda do frontend, foram identificadas e corrigidas **10+ issu
 **Lição Aprendida:** useEffect dependency arrays são críticos. ESLint com `react-hooks/exhaustive-deps` deveria estar ativado em CI/CD para evitar regressões.
 
 **Próximo Passo:** Commitare as mudanças do Frontend (Rating, active_projects, Details) e fazer testes end-to-end
+
+---
+
+## ✅ Issues Resolvidas - SEGUNDA SESSÃO (2026-02-05)
+
+### 10. 👤 Supervisor "N/A" na Seção 4 (SEM FILTRO)
+**Problema:** Ao carregar página sem filtro, supervisor aparecia como "N/A". Ao filtrar por supervisor, funcionava correto.
+
+**Root Cause:** Timing issue com state assíncrono
+- `setSupervisors()` é assíncrono
+- `loadAssignmentHistory()` chamado imediatamente depois
+- `supervisors` ainda vazio ao acessar no state
+- `supervisorsMap` fica vazio → "N/A"
+
+**Solução Implementada:**
+- ✅ Passar `supervisorsList` (variável local) como parâmetro para `loadAssignmentHistory()`
+- ✅ Função aceita `supervisorsList?: Supervisor[]` como parâmetro opcional
+- ✅ Usa parâmetro se passado, fallback para `supervisors` do state
+- ✅ Evita timing issues com state assíncrono
+
+**Arquivos:** `project/src/components/Monitoring.tsx` (Seção 4, linhas 299-310)
+
+**Commits:**
+- `83e8b28` - fix: Corrigir Supervisor N/A e renomear coluna Tarefas
+
+---
+
+### 11. 📋 Seção 3 - Renomear "PROJETOS" → "TAREFAS"
+**Problema:** Coluna dizia "PROJETOS" mas contava TAREFAS atribuídas (confundia usuários).
+
+**Solução Implementada:**
+- ✅ Renomear header de "PROJETOS" para "TAREFAS" (linha 1325)
+- ✅ Clareza: campo agora reflete exatamente o que mostra
+
+**Arquivo:** `project/src/components/Monitoring.tsx` (Seção 3)
+
+**Commits:**
+- `83e8b28` - fix: Corrigir Supervisor N/A e renomear coluna Tarefas
+
+---
+
+### 12. 🎯 Seção 3 - Contar APENAS tarefas ativas
+**Problema:** Contava TODAS as tarefas incluindo concluídas e canceladas (sem relevância).
+
+**Solução Implementada:**
+- ✅ Filtrar por status ativo: `novo`, `em_desenvolvimento`, `analise_tecnica`, `refaca`
+- ✅ Excluir: `concluido`, `cancelado`
+- ✅ Apenas tarefas que exigem interação são contadas
+
+**Arquivo:** `project/src/components/Monitoring.tsx` (Seção 3, função `loadTeamMembersWorkload`)
+
+**Commits:**
+- `ca856ec` - fix: Contar apenas tarefas ativas na Seção 3
+
+---
+
+### 13. 🔴 Seção 7 - REMOVER Math.random() e substituir
+**Problema:** Seção 7 inteira usava `Math.random() * 2 + 6` para simular 6-8h/dia (fake data inaceitável).
+
+**Solução Implementada:**
+- ✅ Remover interface `TrackedHoursStats` (dados fake)
+- ✅ Remover função `calculateTrackedHoursStats()` (Math.random)
+- ✅ Remover estado `trackedHoursStats`
+- ✅ Remover JSX inteira (linhas 1819-1896)
+- ✅ Criar nova interface `TaskWithCollaborators`
+- ✅ Criar função `loadTasksWithMostCollaborators()`
+- ✅ Renderizar **"Top 5 Tarefas com Mais Colaboradores"**
+
+**Nova Seção 7 mostra:**
+- Ranking (🥇🥈🥉)
+- Tarefa + Projeto
+- Supervisor responsável
+- **Número de colaboradores** (👥)
+- Horas totais alocadas
+- Status da tarefa
+- Progresso (%)
+
+**Arquivo:** `project/src/components/Monitoring.tsx` (Seção 7)
+
+**Commits:**
+- `453fb5a` - refactor: Substituir Seção 7 - Remover Math.random()
+
+---
+
+### 14. 👤 Supervisor "N/A" na Seção 7
+**Problema:** Nova Seção 7 também mostrava supervisor como "N/A" (mesmo bug da Seção 4).
+
+**Root Cause:** Mesma issue de timing com state assíncrono.
+
+**Solução Implementada:**
+- ✅ Passar `supervisorsList` como parâmetro para `loadTasksWithMostCollaborators()`
+- ✅ Função aceita parâmetro opcional
+- ✅ Usa parâmetro em vez de state
+
+**Arquivo:** `project/src/components/Monitoring.tsx` (Seção 7)
+
+**Commits:**
+- `bb442ce` - fix: Corrigir Supervisor N/A na Seção 7
+
+---
+
+### 15. 🎯 Seção 7 NÃO respeitava filtro de supervisor
+**Problema:** Ao filtrar por supervisor, Seção 7 não recarregava (mostrava dados de todos os supervisores).
+
+**Root Cause:** `loadTasksWithMostCollaborators()` não era chamada no useEffect que roda quando filtro muda.
+
+**Solução Implementada:**
+- ✅ Adicionar `loadTasksWithMostCollaborators()` no useEffect (linhas 193-199)
+- ✅ Quando `filters.supervisorId` muda, Seção 7 recarrega
+- ✅ Função já filtra internamente por `filters.supervisorId`
+
+**Arquivo:** `project/src/components/Monitoring.tsx` (useEffect linha 196)
+
+**Commits:**
+- `d9bd6e7` - fix: Seção 7 agora responde ao filtro de supervisor
+
+---
+
+## 📊 RESUMO - SEGUNDA SESSÃO
+
+| # | Issue | Tipo | Status | Commits |
+|----|-------|------|--------|---------|
+| 10 | Supervisor N/A Seção 4 | Timing | ✅ Resolvido | 83e8b28 |
+| 11 | Renomear "PROJETOS" | UX | ✅ Resolvido | 83e8b28 |
+| 12 | Contar só tarefas ativas | Lógica | ✅ Resolvido | ca856ec |
+| 13 | Seção 7 Math.random() | Refactor | ✅ Resolvido | 453fb5a |
+| 14 | Supervisor N/A Seção 7 | Timing | ✅ Resolvido | bb442ce |
+| 15 | Filtro não afeta Seção 7 | Funcionalidade | ✅ Resolvido | d9bd6e7 |
+
+**Total de issues resolvidas HOJE (sessão 2):** 6
+**Total geral:** 15 issues
+
+---
+
+**Última Atualização:** 2026-02-05 (segunda sessão)
+**Status:** ✅ Todos os problemas da Seção 7 resolvidos - Seção operacional e responsiva
