@@ -1787,94 +1787,82 @@ export default function Monitoring() {
               <p className="text-sm text-green-700 mt-2">Todas as tarefas estão em dia</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {riskTasks.map((task, index) => {
-                const riskColors = {
-                  critical: 'border-red-300 bg-red-50',
-                  high: 'border-orange-300 bg-orange-50',
-                  medium: 'border-yellow-300 bg-yellow-50',
-                };
+            <div className="overflow-x-auto bg-white rounded-lg shadow-sm border border-gray-200">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">#</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">TAREFA / PROJETO</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">RISCO</th>
+                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">PROGRESSO</th>
+                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">HORAS</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">RAZÃO</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {riskTasks.map((task, index) => {
+                    const riskEmojis = {
+                      critical: '🔴',
+                      high: '🟠',
+                      medium: '🟡',
+                    };
 
-                const riskEmojis = {
-                  critical: '🔴',
-                  high: '🟠',
-                  medium: '🟡',
-                };
+                    const riskLabels = {
+                      critical: 'CRÍTICO',
+                      high: 'RISCO',
+                      medium: 'ATENÇÃO',
+                    };
 
-                const riskLabels = {
-                  critical: 'CRÍTICO',
-                  high: 'RISCO',
-                  medium: 'ATENÇÃO',
-                };
+                    const riskBgColors = {
+                      critical: 'bg-red-100',
+                      high: 'bg-orange-100',
+                      medium: 'bg-yellow-100',
+                    };
 
-                return (
-                  <div
-                    key={task.id}
-                    className={`rounded-lg shadow-sm border-2 p-6 ${riskColors[task.risk_level]}`}
-                  >
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-start gap-3">
-                        <span className="text-2xl font-bold text-gray-900 bg-white px-3 py-1 rounded">
-                          {index + 1}
-                        </span>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-2xl">{riskEmojis[task.risk_level]}</span>
-                            <span
-                              className={`px-3 py-1 rounded text-xs font-semibold ${
-                                task.risk_level === 'critical'
-                                  ? 'bg-red-200 text-red-800'
-                                  : task.risk_level === 'high'
-                                  ? 'bg-orange-200 text-orange-800'
-                                  : 'bg-yellow-200 text-yellow-800'
-                              }`}
-                            >
-                              {riskLabels[task.risk_level]}
-                            </span>
+                    const riskTextColors = {
+                      critical: 'text-red-800',
+                      high: 'text-orange-800',
+                      medium: 'text-yellow-800',
+                    };
+
+                    return (
+                      <tr key={task.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{index + 1}</td>
+                        <td className="px-6 py-4 text-sm">
+                          <p className="font-medium text-gray-900">{task.title}</p>
+                          <p className="text-xs text-gray-600">{task.project_name}</p>
+                        </td>
+                        <td className="px-6 py-4 text-sm">
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold ${riskBgColors[task.risk_level]} ${riskTextColors[task.risk_level]}`}>
+                            {riskEmojis[task.risk_level]} {riskLabels[task.risk_level]}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="w-16 bg-gray-300 rounded-full h-2">
+                              <div
+                                className={`h-2 rounded-full ${
+                                  task.progress >= 75 ? 'bg-green-500' : task.progress >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                                }`}
+                                style={{ width: `${task.progress}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-gray-600 w-8 text-right">{task.progress}%</span>
                           </div>
-                          <p className="text-sm text-gray-600 mt-1">Razão: {task.risk_reason}</p>
-                        </div>
-                      </div>
-                      {task.days_overdue < 0 && (
-                        <span className="text-lg font-bold text-red-600">❌ {task.days_overdue} dias</span>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <p className="text-lg font-semibold text-gray-900">{task.title}</p>
-                        <p className="text-sm text-gray-600">{task.project_name}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm text-gray-600">
-                          <strong>Supervisor:</strong> {task.supervisor_name}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          <strong>Responsável:</strong> {task.responsible_user}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Progresso */}
-                    <div className="mb-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-medium text-gray-700">Progresso: {task.progress}%</span>
-                        <span className="text-sm font-medium text-gray-700">
-                          Horas: {task.tracked_hours.toFixed(1)}h / {task.allocated_hours.toFixed(1)}h
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-300 rounded-full h-3">
-                        <div
-                          className={`h-3 rounded-full ${
-                            task.progress >= 75 ? 'bg-green-500' : task.progress >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                          }`}
-                          style={{ width: `${task.progress}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-center">
+                          <span className="font-medium text-gray-900">
+                            {task.tracked_hours.toFixed(1)}h / {task.allocated_hours.toFixed(1)}h
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-700 max-w-xs">
+                          <span className="inline-block">{task.risk_reason}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
