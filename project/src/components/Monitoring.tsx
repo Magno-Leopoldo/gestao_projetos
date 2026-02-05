@@ -279,8 +279,8 @@ export default function Monitoring() {
       // Carregar histórico de atribuições (passar supervisorsList para evitar timing issues com state)
       await loadAssignmentHistory(supervisorsList);
 
-      // Carregar tarefas com mais colaboradores
-      await loadTasksWithMostCollaborators();
+      // Carregar tarefas com mais colaboradores (passar supervisorsList para evitar timing issues com state)
+      await loadTasksWithMostCollaborators(supervisorsList);
     } catch (error) {
       console.error('Erro ao carregar dados de monitoramento:', error);
     } finally {
@@ -527,7 +527,7 @@ export default function Monitoring() {
     }
   }
 
-  async function loadTasksWithMostCollaborators() {
+  async function loadTasksWithMostCollaborators(supervisorsList?: Supervisor[]) {
     try {
       const taskMetrics = new Map<number, {
         id: number;
@@ -542,7 +542,9 @@ export default function Monitoring() {
 
       const allProjects = await projectsService.getAll({ include: 'stages' });
       let supervisorsMap = new Map<number, Supervisor>();
-      supervisors.forEach((s) => supervisorsMap.set(s.id, s));
+      // Usar supervisorsList passado como parâmetro, ou fallback para state 'supervisors'
+      const supsToUse = supervisorsList || supervisors;
+      supsToUse.forEach((s) => supervisorsMap.set(s.id, s));
 
       // Determinar filtro de supervisor
       let filteredProjects = allProjects;
