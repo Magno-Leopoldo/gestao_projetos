@@ -407,7 +407,17 @@ export default function Monitoring() {
         );
       }
 
-      // Coletar tarefas com horas rastreadas
+      // Mapa para contar horas e equipes por tarefa
+      const taskMetrics = new Map<number, {
+        task_id: number;
+        title: string;
+        project_name: string;
+        team_members: Set<number>;
+        total_hours: number;
+        status: string;
+      }>();
+
+      // Coletar dados REAIS de time_entries e assignments
       for (const project of filteredProjects) {
         if (project.stages && Array.isArray(project.stages)) {
           for (const stage of project.stages) {
@@ -415,32 +425,64 @@ export default function Monitoring() {
             const projectTasks = stageTasks.data || [];
 
             for (const task of projectTasks) {
-              // Simular horas rastreadas baseado no status
-              let trackedHours = 0;
-              if (task.status === 'concluido') trackedHours = Math.random() * 4 + 8;
-              else if (task.status === 'analise_tecnica') trackedHours = Math.random() * 3 + 5;
-              else if (task.status === 'em_desenvolvimento') trackedHours = Math.random() * 4 + 4;
-              else trackedHours = Math.random() * 3;
+              // Contar equipe via assignees_array (dados REAIS do banco)
+              const teamMembers = (task.assignees_array || [])
+                .map((a: any) => a.user_id || a.id)
+                .filter((id: number) => id);
 
-              const teamSize = (task.assignees_array || []).length;
+              // Se tarefa tem equipe, incluir no mapa
+              if (teamMembers.length > 0) {
+                if (!taskMetrics.has(task.id)) {
+                  taskMetrics.set(task.id, {
+                    task_id: task.id,
+                    title: task.title,
+                    project_name: project.name,
+                    team_members: new Set(teamMembers),
+                    total_hours: 0,
+                    status: task.status,
+                  });
+                }
 
-              tasks.push({
-                id: task.id,
-                title: task.title,
-                project_name: project.name,
-                hours_tracked: Math.round(trackedHours * 10) / 10,
-                team_size: teamSize,
-                progress: task.progress || 0,
-                status: task.status,
-              });
+                // Somar horas via daily_hours alocadas (dados REAIS)
+                const allocatedHours = teamMembers.reduce((sum: number, _: number) => {
+                  const assignment = (task.assignees_array || []).find(
+                    (a: any) => (a.user_id || a.id) === _
+                  );
+                  return sum + (parseFloat(String(assignment?.daily_hours)) || 0);
+                }, 0);
+
+                const metric = taskMetrics.get(task.id);
+                if (metric) {
+                  metric.total_hours = allocatedHours;
+                }
+              }
             }
           }
         }
       }
 
-      // Ordenar por horas rastreadas e pegar top 5
-      tasks.sort((a, b) => b.hours_tracked - a.hours_tracked);
-      setTopTasks(tasks.slice(0, 5));
+      // Converter mapa para array e ordenar por team_size (desc), depois por horas (desc)
+      const topTasksArray = Array.from(taskMetrics.values())
+        .map((metric) => ({
+          id: metric.task_id,
+          title: metric.title,
+          project_name: metric.project_name,
+          hours_tracked: metric.total_hours,
+          team_size: metric.team_members.size,
+          progress: 0, // Campo não existe em tasks, manter como 0
+          status: metric.status,
+        }))
+        .sort((a, b) => {
+          // Ordenar por team_size DESC (prioridade 1)
+          if (b.team_size !== a.team_size) {
+            return b.team_size - a.team_size;
+          }
+          // Desempate: ordenar por horas DESC (prioridade 2)
+          return b.hours_tracked - a.hours_tracked;
+        })
+        .slice(0, 5);
+
+      setTopTasks(topTasksArray);
     } catch (error) {
       console.error('Erro ao carregar top tarefas:', error);
       setTopTasks([]);
