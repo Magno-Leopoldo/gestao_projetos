@@ -107,16 +107,15 @@ interface RiskTask {
   risk_reason: string; // Por que está em risco
 }
 
-interface TrackedHoursStats {
-  dailyData: Array<{ day: string; hours: number }>;
-  total: number;
-  average: number;
-  peak: number;
-  low: number;
-  trend: string; // ↑ ou ↓
-  trendPercent: number;
-  stdDeviation: number;
-  efficiency: number; // percentual
+interface TaskWithCollaborators {
+  id: number;
+  title: string;
+  project_name: string;
+  supervisor_name: string;
+  collaborators_count: number;
+  total_allocated_hours: number;
+  status: TaskStatus;
+  progress: number;
 }
 
 interface TopTask {
@@ -168,17 +167,7 @@ export default function Monitoring() {
     dailyTrend: [],
   });
   const [riskTasks, setRiskTasks] = useState<RiskTask[]>([]);
-  const [trackedHoursStats, setTrackedHoursStats] = useState<TrackedHoursStats>({
-    dailyData: [],
-    total: 0,
-    average: 0,
-    peak: 0,
-    low: 0,
-    trend: '→',
-    trendPercent: 0,
-    stdDeviation: 0,
-    efficiency: 0,
-  });
+  const [tasksWithCollaborators, setTasksWithCollaborators] = useState<TaskWithCollaborators[]>([]);
   const [topTasks, setTopTasks] = useState<TopTask[]>([]);
   const [statusDistribution, setStatusDistribution] = useState<StatusDistribution[]>([]);
   const [loading, setLoading] = useState(true);
@@ -289,6 +278,9 @@ export default function Monitoring() {
 
       // Carregar histórico de atribuições (passar supervisorsList para evitar timing issues com state)
       await loadAssignmentHistory(supervisorsList);
+
+      // Carregar tarefas com mais colaboradores
+      await loadTasksWithMostCollaborators();
     } catch (error) {
       console.error('Erro ao carregar dados de monitoramento:', error);
     } finally {
@@ -535,66 +527,83 @@ export default function Monitoring() {
     }
   }
 
-  async function calculateTrackedHoursStats() {
+  async function loadTasksWithMostCollaborators() {
     try {
-      const today = new Date();
-      const startOfWeek = new Date(today);
-      startOfWeek.setDate(today.getDate() - today.getDay());
+      const taskMetrics = new Map<number, {
+        id: number;
+        title: string;
+        project_name: string;
+        supervisor_name: string;
+        collaborators_count: number;
+        total_allocated_hours: number;
+        status: TaskStatus;
+        progress: number;
+      }>();
 
-      const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
-      const dailyData: Array<{ day: string; hours: number }> = [];
-      const dailyHours: number[] = [];
+      const allProjects = await projectsService.getAll({ include: 'stages' });
+      let supervisorsMap = new Map<number, Supervisor>();
+      supervisors.forEach((s) => supervisorsMap.set(s.id, s));
 
-      // Calcular horas por dia da semana
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(startOfWeek);
-        d.setDate(startOfWeek.getDate() + i);
-
-        // Simular dados de horas rastreadas (em produção, viria do backend)
-        // Gerar números aleatórios realistas entre 6-8 horas
-        const hours = Math.random() * 2 + 6; // 6-8h
-        dailyData.push({
-          day: dayNames[d.getDay()],
-          hours: Math.round(hours * 10) / 10,
-        });
-        dailyHours.push(Math.round(hours * 10) / 10);
+      // Determinar filtro de supervisor
+      let filteredProjects = allProjects;
+      if (filters.supervisorId) {
+        filteredProjects = allProjects.filter(
+          (p: any) => p.supervisor_id === filters.supervisorId
+        );
       }
 
-      // Calcular estatísticas
-      const total = dailyHours.reduce((a, b) => a + b, 0);
-      const average = total / dailyHours.length;
-      const peak = Math.max(...dailyHours);
-      const low = Math.min(...dailyHours);
+      // Iterar sobre projetos para coletar tarefas com colaboradores
+      for (const project of filteredProjects) {
+        if (project.stages && Array.isArray(project.stages)) {
+          for (const stage of project.stages) {
+            const stageTasks = await tasksService.getByStage(stage.id);
+            const tasks = stageTasks.data || [];
 
-      // Calcular tendência (comparar segunda metade com primeira metade)
-      const mid = Math.floor(dailyHours.length / 2);
-      const firstHalf = dailyHours.slice(0, mid).reduce((a, b) => a + b, 0) / mid;
-      const secondHalf = dailyHours.slice(mid).reduce((a, b) => a + b, 0) / (dailyHours.length - mid);
-      const trendPercent = Math.round(((secondHalf - firstHalf) / firstHalf) * 100);
-      const trend = secondHalf >= firstHalf ? '↑' : '↓';
+            for (const task of tasks) {
+              const assignees = task.assignees_array || [];
+              const collaboratorsCount = assignees.length;
 
-      // Calcular desvio padrão
-      const variance = dailyHours.reduce((sum, val) => sum + Math.pow(val - average, 2), 0) / dailyHours.length;
-      const stdDeviation = Math.sqrt(variance);
+              // Somar horas alocadas
+              const totalAllocatedHours = assignees.reduce(
+                (sum: number, assignee: any) => sum + (parseFloat(String(assignee.daily_hours)) || 0),
+                0
+              );
 
-      // Calcular eficiência (horas rastreadas vs horas alocadas esperadas)
-      const expectedDaily = 8; // 8 horas por dia
-      const expectedWeekly = expectedDaily * 5; // 40 horas por semana (5 dias úteis)
-      const efficiency = Math.round((total / expectedWeekly) * 100);
+              // Só incluir tarefas com pelo menos 1 colaborador
+              if (collaboratorsCount > 0) {
+                const supervisor = supervisorsMap.get(project.supervisor_id);
+                taskMetrics.set(task.id, {
+                  id: task.id,
+                  title: task.title,
+                  project_name: project.name,
+                  supervisor_name: supervisor?.full_name || 'N/A',
+                  collaborators_count: collaboratorsCount,
+                  total_allocated_hours: Math.round(totalAllocatedHours * 10) / 10,
+                  status: task.status,
+                  progress: task.progress || 0,
+                });
+              }
+            }
+          }
+        }
+      }
 
-      setTrackedHoursStats({
-        dailyData,
-        total: Math.round(total * 10) / 10,
-        average: Math.round(average * 10) / 10,
-        peak,
-        low,
-        trend,
-        trendPercent: Math.abs(trendPercent),
-        stdDeviation: Math.round(stdDeviation * 10) / 10,
-        efficiency,
-      });
+      // Converter para array e ordenar por número de colaboradores (descendente)
+      const tasksArray = Array.from(taskMetrics.values())
+        .sort((a, b) => {
+          // Primeiro por número de colaboradores
+          if (b.collaborators_count !== a.collaborators_count) {
+            return b.collaborators_count - a.collaborators_count;
+          }
+          // Depois por horas alocadas
+          return b.total_allocated_hours - a.total_allocated_hours;
+        })
+        .slice(0, 5); // Top 5
+
+      setTasksWithCollaborators(tasksArray);
     } catch (error) {
-      console.error('Erro ao calcular horas rastreadas:', error);
+      console.error('Erro ao carregar tarefas com mais colaboradores:', error);
+      setTasksWithCollaborators([]);
     }
   }
 
@@ -1807,83 +1816,93 @@ export default function Monitoring() {
           )}
         </div>
 
-        {/* ===== SEÇÃO 7: HORAS RASTREADAS ===== */}
+        {/* ===== SEÇÃO 7: TOP 5 TAREFAS COM MAIS COLABORADORES ===== */}
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">⏱️ Horas Rastreadas</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">👥 Top 5 Tarefas com Mais Colaboradores</h2>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Gráfico em 2/3 */}
-            <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h3 className="font-semibold text-gray-900 mb-4">Horas por Dia (Esta Semana)</h3>
-              {trackedHoursStats.dailyData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250}>
-                  <LineChart data={trackedHoursStats.dailyData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="day" />
-                    <YAxis domain={[0, 10]} label={{ value: 'Horas', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip formatter={(value) => `${value}h`} />
-                    <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="hours"
-                      stroke="#10b981"
-                      strokeWidth={3}
-                      dot={{ fill: '#10b981', r: 5 }}
-                      activeDot={{ r: 7 }}
-                      name="Horas Rastreadas"
-                    />
-                    {/* Linha de limite de 8h */}
-                    <Line type="stepAfter" dataKey={() => 8} stroke="#ef4444" strokeDasharray="5 5" dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <p className="text-gray-600 text-sm">Sem dados disponíveis</p>
-              )}
+          {tasksWithCollaborators.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-600">
+              <p>Nenhuma tarefa encontrada</p>
             </div>
+          ) : (
+            <div className="overflow-x-auto bg-white rounded-lg shadow-sm border border-gray-200">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">#</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">TAREFA / PROJETO</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">SUPERVISOR</th>
+                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">COLABORADORES</th>
+                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">HORAS TOTAIS</th>
+                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">STATUS</th>
+                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">PROGRESSO</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {tasksWithCollaborators.map((task, index) => {
+                    const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+                    const statusBadgeColors = {
+                      novo: 'bg-gray-200 text-gray-800',
+                      em_desenvolvimento: 'bg-blue-200 text-blue-800',
+                      analise_tecnica: 'bg-purple-200 text-purple-800',
+                      concluido: 'bg-green-200 text-green-800',
+                      refaca: 'bg-red-200 text-red-800',
+                    };
 
-            {/* Estatísticas em 1/3 */}
-            <div className="space-y-3">
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <p className="text-xs text-gray-500 font-medium">TOTAL SEMANA</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">{trackedHoursStats.total}h</p>
-                <p className="text-xs text-gray-600 mt-1">
-                  Meta: 40h (5 dias × 8h)
-                </p>
-              </div>
-
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <p className="text-xs text-gray-500 font-medium">MÉDIA/DIA</p>
-                <p className="text-2xl font-bold text-blue-600 mt-2">{trackedHoursStats.average}h</p>
-              </div>
-
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <p className="text-xs text-gray-500 font-medium">PEAK/LOW</p>
-                <p className="text-sm font-semibold text-gray-900 mt-2">
-                  {trackedHoursStats.peak}h / {trackedHoursStats.low}h
-                </p>
-              </div>
-
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <p className="text-xs text-gray-500 font-medium">TENDÊNCIA</p>
-                <p className="text-2xl font-bold mt-2">
-                  <span className={trackedHoursStats.trend === '↑' ? 'text-green-600' : 'text-red-600'}>
-                    {trackedHoursStats.trend} {trackedHoursStats.trendPercent}%
-                  </span>
-                </p>
-              </div>
-
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <p className="text-xs text-gray-500 font-medium">EFICIÊNCIA</p>
-                <p className="text-2xl font-bold text-purple-600 mt-2">{trackedHoursStats.efficiency}%</p>
-                <p className="text-xs text-gray-600 mt-1">vs esperado</p>
-              </div>
-
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <p className="text-xs text-gray-500 font-medium">DESVIO PADRÃO</p>
-                <p className="text-2xl font-bold text-gray-900 mt-2">±{trackedHoursStats.stdDeviation}h</p>
-              </div>
+                    return (
+                      <tr key={task.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 text-center">
+                          <span className="text-2xl">{medals[index]}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-sm font-medium text-gray-900">{task.title}</p>
+                          <p className="text-xs text-gray-500">{task.project_name}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-sm text-gray-700">{task.supervisor_name}</p>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <span className="text-2xl">👥</span>
+                            <span className="text-sm font-semibold text-gray-900">{task.collaborators_count}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <p className="text-sm font-semibold text-gray-900">{task.total_allocated_hours}h</p>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                              statusBadgeColors[task.status]
+                            }`}
+                          >
+                            {STATUS_LABELS[task.status]}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-16 h-2 bg-gray-300 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full ${
+                                  task.progress >= 75
+                                    ? 'bg-green-500'
+                                    : task.progress >= 50
+                                    ? 'bg-yellow-500'
+                                    : 'bg-blue-500'
+                                }`}
+                                style={{ width: `${task.progress}%` }}
+                              />
+                            </div>
+                            <span className="text-xs font-medium text-gray-700 w-8 text-right">{task.progress}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          </div>
+          )}
         </div>
 
         {/* ===== SEÇÃO 8: TOP 5 TAREFAS POR HORAS ===== */}
