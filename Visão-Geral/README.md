@@ -84,6 +84,7 @@
 
 ### 🔍 Bugs Resolvidos (2026-02-05)
 
+#### Monitoramento - Issues Funcionais
 | # | Issue | Solução | Commit |
 |----|-------|---------|--------|
 | 1 | Rating sem base | Removido sistema de estrelas | - |
@@ -91,6 +92,14 @@
 | 3 | Botão Details | Removido | - |
 | 4 | assigned_at não retornado | Adicionado em queries | `bcc3262` |
 | 5 | Campo com nome errado | assignees_array | `546188c` |
+
+#### useEffect Dependency Issues (Crítico)
+| # | Componente | Problema | Solução | Commit |
+|----|-----------|----------|---------|--------|
+| 6 | Dashboard | Missing `profile` | Adicionado nas deps | `ce3a8ab` |
+| 7 | Monitoring | Missing `supervisors` | Adicionado nas deps | `ce3a8ab` |
+| 8 | AssignUsersModal | Missing `taskId` | Adicionado nas deps | `05de0ae` |
+| 9 | TaskDetail | Missing múltiplos | Adicionado todos | `05de0ae` |
 
 **Documentação Detalhada:** [Bugs/MONITORAMENTO-ISSUES-IDENTIFICADAS.md](../Bugs/MONITORAMENTO-ISSUES-IDENTIFICADAS.md)
 

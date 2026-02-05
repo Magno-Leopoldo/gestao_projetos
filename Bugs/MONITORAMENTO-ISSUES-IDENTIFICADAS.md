@@ -147,4 +147,45 @@ Investigação com debug logging revelou que:
 
 **Última Atualização:** 2026-02-05
 **Status Final:** ✅ Todas as 5 issues foram identificadas, investigadas e resolvidas
+
+---
+
+## 🔍 INVESTIGAÇÃO ADICIONAL - useEffect Dependency Issues (2026-02-05)
+
+Após análise profunda do frontend, foram identificadas e corrigidas **10+ issues de dependências em useEffect**. Estes bugs tinham impacto variado:
+
+### ✅ CORRIGIDOS (HIGH SEVERITY):
+1. **Dashboard.tsx (Line 65-67)**
+   - Falta: `profile` nas dependências
+   - Impacto: Team workload nunca carregava após login
+   - Fix: Adicionar `profile` ao array de deps
+
+2. **Monitoring.tsx (Line 204-209)**
+   - Falta: `supervisors` nas dependências (JÁ CORRIGIDO ANTES)
+   - Impacto: N/A aparecia para supervisores
+   - Fix: `[filters.supervisorId, supervisors]`
+
+### ✅ CORRIGIDOS (MEDIUM SEVERITY):
+3. **AssignUsersModal.tsx (Line 40-56)**
+   - Falta: `taskId` nas dependências
+   - Impacto: Mudanças de taskId não re-validavam dependências
+   - Fix: Adicionar `taskId`
+
+4. **TaskDetail.tsx (Line 53-68)**
+   - Falta: `projectId, stageId, taskId, user`
+   - Impacto: Mudanças não recarregavam assignees
+   - Fix: Adicionar todos os valores nas deps
+
+### ✅ VERIFICADOS (CORRETOS):
+- Monitoring.tsx (Line 186-188): Inicialização com [] ✅
+- Monitoring.tsx (Line 191-201): Deps corretas ✅
+- TasksList.tsx: Pattern de múltiplos efeitos ✅
+- Kanban.tsx, CreateProjectModal.tsx, AuthContext.tsx: OK ✅
+
+**Commits de Correção:**
+- `ce3a8ab` - fix: Adicionar 'supervisors' nas dependências do useEffect
+- `05de0ae` - fix: Corrigir dependências de useEffect - MEDIUM severity
+
+**Lição Aprendida:** useEffect dependency arrays são críticos. ESLint com `react-hooks/exhaustive-deps` deveria estar ativado em CI/CD para evitar regressões.
+
 **Próximo Passo:** Commitare as mudanças do Frontend (Rating, active_projects, Details) e fazer testes end-to-end
