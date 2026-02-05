@@ -46,32 +46,32 @@
 
 ---
 
-## 🔴 Issues Pendentes - Requer Investigação
+## ✅ Issues Resolvidas - Continuação
 
-### 4. 📋 Histórico de Atribuições - Não está puxando dados
+### 4. 📋 Histórico de Atribuições - Campo `assigned_at` não estava sendo retornado
 **Problema:** Seção 4 não mostra as atribuições criadas recentemente. Usuário criou novo projeto, atribuiu várias vezes, mas nada aparece na tela.
 
-**Root Cause Identificada:**
-Função `loadAssignmentHistory()` usa `assignment.assigned_at` (linha 344) para puxar data da atribuição:
-```javascript
-assigned_at: assignment.assigned_at || new Date().toISOString(),
-```
+**Root Cause Encontrada:**
+Campo `assigned_at` existia no banco (`task_assignments.assigned_at` desde linha 94 de `init-mysql.sql`), mas **NÃO estava sendo retornado pela API**.
 
-Suspeita: O campo `assignment.assigned_at` pode não estar sendo preenchido no banco, ou tem outro nome.
+Funções afetadas no `tasksController.js`:
+- `getTasksByStage()` linha 164
+- `getTaskById()` linha 260
 
-**O que precisa ser feito:**
-1. ❓ Verificar estrutura real de `assignments_array` no banco
-2. ❓ Encontrar qual é o campo correto que guarda a data de atribuição
-3. ❓ Confirmar se o campo está sendo preenchido quando nova atribuição é criada
-4. ❓ Atualizar a função para usar o campo correto
+Ambas faziam: `SELECT u.id, u.full_name, u.email, u.role, ta.daily_hours`
+Mas faltava: `ta.assigned_at`
 
-**Arquivo:** `project/src/components/Monitoring.tsx` (Seção 4, função `loadAssignmentHistory`, linha 344)
+**Solução Implementada:**
+- ✅ Adicionar `ta.assigned_at` na query da linha 164 (getTasksByStage)
+- ✅ Adicionar `ta.assigned_at` na query da linha 260 (getTaskById)
+- ✅ Campo agora é retornado no `assignments_array`
+- ✅ Monitoramento Seção 4 pode acessar `assignment.assigned_at`
 
-**Próximos Passos:**
-- [ ] Investigar estrutura de dados no banco (tabela task_assignments)
-- [ ] Verificar como/quando o campo de data é preenchido
-- [ ] Corrigir referência ao campo correto
-- [ ] Testar com novas atribuições
+**Arquivo Corrigido:** `backend/src/controllers/tasksController.js`
+
+**Commit:** `bcc3262` - fix: Incluir 'assigned_at' nas queries de assignments
+
+**Status:** ✅ RESOLVIDO
 
 ---
 
