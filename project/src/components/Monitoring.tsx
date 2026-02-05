@@ -206,7 +206,7 @@ export default function Monitoring() {
       loadAssignmentHistory();
       loadRiskTasks();
     }
-  }, [filters.supervisorId]);
+  }, [filters.supervisorId, supervisors]);
 
   async function loadMonitoringData() {
     try {
