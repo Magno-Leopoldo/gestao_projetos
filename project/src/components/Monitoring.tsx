@@ -97,8 +97,10 @@ interface RiskTask {
   id: number;
   title: string;
   project_name: string;
+  supervisor_id: number;
   supervisor_name: string;
   responsible_user: string;
+  status: TaskStatus;
   progress: number; // 0-100
   allocated_hours: number;
   tracked_hours: number;
@@ -167,6 +169,9 @@ export default function Monitoring() {
     dailyTrend: [],
   });
   const [riskTasks, setRiskTasks] = useState<RiskTask[]>([]);
+  const [riskTasksPage, setRiskTasksPage] = useState(1);
+  const [riskTasksSortBy, setRiskTasksSortBy] = useState<'risk_level' | 'days_overdue' | 'progress' | 'title'>('risk_level');
+  const [riskTasksSortDesc, setRiskTasksSortDesc] = useState(true);
   const [tasksWithCollaborators, setTasksWithCollaborators] = useState<TaskWithCollaborators[]>([]);
   const [topTasks, setTopTasks] = useState<TopTask[]>([]);
   const [statusDistribution, setStatusDistribution] = useState<StatusDistribution[]>([]);
@@ -734,8 +739,10 @@ export default function Monitoring() {
                   id: task.id,
                   title: task.title,
                   project_name: project.name,
+                  supervisor_id: project.supervisor_id,
                   supervisor_name: supervisor?.full_name || 'N/A',
                   responsible_user: responsibleUser,
+                  status: task.status,
                   progress,
                   allocated_hours: allocatedHours,
                   tracked_hours: Math.round(trackedHours * 10) / 10, // Horas reais rastreadas
@@ -1787,82 +1794,202 @@ export default function Monitoring() {
               <p className="text-sm text-green-700 mt-2">Todas as tarefas estão em dia</p>
             </div>
           ) : (
-            <div className="overflow-x-auto bg-white rounded-lg shadow-sm border border-gray-200">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">#</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">TAREFA / PROJETO</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">RISCO</th>
-                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">PROGRESSO</th>
-                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">HORAS</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">RAZÃO</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {riskTasks.map((task, index) => {
-                    const riskEmojis = {
-                      critical: '🔴',
-                      high: '🟠',
-                      medium: '🟡',
-                    };
+            <div>
+              {/* Contador e controle de ordenação */}
+              <div className="flex items-center justify-between mb-4 px-2">
+                <p className="text-sm text-gray-600">
+                  <strong>Total:</strong> {riskTasks.length} tarefa{riskTasks.length !== 1 ? 's' : ''} em risco
+                </p>
+                <div className="text-xs text-gray-500">
+                  Página {riskTasksPage} de {Math.ceil(riskTasks.length / 15)}
+                </div>
+              </div>
 
-                    const riskLabels = {
-                      critical: 'CRÍTICO',
-                      high: 'RISCO',
-                      medium: 'ATENÇÃO',
-                    };
+              {/* Tabela */}
+              <div className="overflow-x-auto bg-white rounded-lg shadow-sm border border-gray-200">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">#</th>
+                      <th
+                        className="px-6 py-3 text-left text-xs font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
+                        onClick={() => {
+                          if (riskTasksSortBy === 'title') {
+                            setRiskTasksSortDesc(!riskTasksSortDesc);
+                          } else {
+                            setRiskTasksSortBy('title');
+                            setRiskTasksSortDesc(false);
+                          }
+                          setRiskTasksPage(1);
+                        }}
+                      >
+                        TAREFA / PROJETO {riskTasksSortBy === 'title' ? (riskTasksSortDesc ? '▼' : '▲') : ''}
+                      </th>
+                      <th
+                        className="px-6 py-3 text-left text-xs font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
+                        onClick={() => {
+                          if (riskTasksSortBy === 'risk_level') {
+                            setRiskTasksSortDesc(!riskTasksSortDesc);
+                          } else {
+                            setRiskTasksSortBy('risk_level');
+                            setRiskTasksSortDesc(true);
+                          }
+                          setRiskTasksPage(1);
+                        }}
+                      >
+                        RISCO {riskTasksSortBy === 'risk_level' ? (riskTasksSortDesc ? '▼' : '▲') : ''}
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">SUPERVISOR / RESPONSÁVEL</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">STATUS</th>
+                      <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">PROGRESSO</th>
+                      <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">HORAS</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">RAZÃO</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {(() => {
+                      // Ordenação
+                      let sortedTasks = [...riskTasks];
+                      if (riskTasksSortBy === 'risk_level') {
+                        const riskOrder = { 'critical': 0, 'high': 1, 'medium': 2 };
+                        sortedTasks.sort((a, b) => {
+                          const diff = riskOrder[a.risk_level] - riskOrder[b.risk_level];
+                          return riskTasksSortDesc ? diff : -diff;
+                        });
+                      } else if (riskTasksSortBy === 'days_overdue') {
+                        sortedTasks.sort((a, b) => {
+                          const diff = a.days_overdue - b.days_overdue;
+                          return riskTasksSortDesc ? -diff : diff;
+                        });
+                      } else if (riskTasksSortBy === 'progress') {
+                        sortedTasks.sort((a, b) => {
+                          const diff = a.progress - b.progress;
+                          return riskTasksSortDesc ? -diff : diff;
+                        });
+                      } else if (riskTasksSortBy === 'title') {
+                        sortedTasks.sort((a, b) => {
+                          const diff = a.title.localeCompare(b.title);
+                          return riskTasksSortDesc ? -diff : diff;
+                        });
+                      }
 
-                    const riskBgColors = {
-                      critical: 'bg-red-100',
-                      high: 'bg-orange-100',
-                      medium: 'bg-yellow-100',
-                    };
+                      // Paginação
+                      const itemsPerPage = 15;
+                      const start = (riskTasksPage - 1) * itemsPerPage;
+                      const paginatedTasks = sortedTasks.slice(start, start + itemsPerPage);
 
-                    const riskTextColors = {
-                      critical: 'text-red-800',
-                      high: 'text-orange-800',
-                      medium: 'text-yellow-800',
-                    };
+                      // Status badges
+                      const statusColors = {
+                        novo: 'bg-gray-100 text-gray-800',
+                        em_desenvolvimento: 'bg-blue-100 text-blue-800',
+                        analise_tecnica: 'bg-purple-100 text-purple-800',
+                        concluido: 'bg-green-100 text-green-800',
+                        refaca: 'bg-red-100 text-red-800',
+                      };
 
-                    return (
-                      <tr key={task.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{index + 1}</td>
-                        <td className="px-6 py-4 text-sm">
-                          <p className="font-medium text-gray-900">{task.title}</p>
-                          <p className="text-xs text-gray-600">{task.project_name}</p>
-                        </td>
-                        <td className="px-6 py-4 text-sm">
-                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold ${riskBgColors[task.risk_level]} ${riskTextColors[task.risk_level]}`}>
-                            {riskEmojis[task.risk_level]} {riskLabels[task.risk_level]}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center justify-center gap-2">
-                            <div className="w-16 bg-gray-300 rounded-full h-2">
-                              <div
-                                className={`h-2 rounded-full ${
-                                  task.progress >= 75 ? 'bg-green-500' : task.progress >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                                }`}
-                                style={{ width: `${task.progress}%` }}
-                              />
+                      const statusLabels = {
+                        novo: 'Novo',
+                        em_desenvolvimento: 'Em Dev',
+                        analise_tecnica: 'Análise',
+                        concluido: 'Concluído',
+                        refaca: 'Refação',
+                      };
+
+                      const riskEmojis = {
+                        critical: '🔴',
+                        high: '🟠',
+                        medium: '🟡',
+                      };
+
+                      const riskLabels = {
+                        critical: 'CRÍTICO',
+                        high: 'RISCO',
+                        medium: 'ATENÇÃO',
+                      };
+
+                      const riskBgColors = {
+                        critical: 'bg-red-100',
+                        high: 'bg-orange-100',
+                        medium: 'bg-yellow-100',
+                      };
+
+                      const riskTextColors = {
+                        critical: 'text-red-800',
+                        high: 'text-orange-800',
+                        medium: 'text-yellow-800',
+                      };
+
+                      return paginatedTasks.map((task, index) => (
+                        <tr key={task.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 text-sm font-medium text-gray-900">{start + index + 1}</td>
+                          <td className="px-6 py-4 text-sm">
+                            <p className="font-medium text-gray-900">{task.title}</p>
+                            <p className="text-xs text-gray-600">{task.project_name}</p>
+                          </td>
+                          <td className="px-6 py-4 text-sm">
+                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold ${riskBgColors[task.risk_level]} ${riskTextColors[task.risk_level]}`}>
+                              {riskEmojis[task.risk_level]} {riskLabels[task.risk_level]}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm">
+                            <p className="font-medium text-gray-900">{task.supervisor_name}</p>
+                            <p className="text-xs text-gray-600">{task.responsible_user}</p>
+                          </td>
+                          <td className="px-6 py-4 text-sm">
+                            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${statusColors[task.status] || 'bg-gray-100 text-gray-800'}`}>
+                              {statusLabels[task.status] || task.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <div className="w-16 bg-gray-300 rounded-full h-2">
+                                <div
+                                  className={`h-2 rounded-full ${
+                                    task.progress >= 75 ? 'bg-green-500' : task.progress >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                                  }`}
+                                  style={{ width: `${task.progress}%` }}
+                                />
+                              </div>
+                              <span className="text-xs text-gray-600 w-8 text-right">{task.progress}%</span>
                             </div>
-                            <span className="text-xs text-gray-600 w-8 text-right">{task.progress}%</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-center">
-                          <span className="font-medium text-gray-900">
-                            {task.tracked_hours.toFixed(1)}h / {task.allocated_hours.toFixed(1)}h
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-700 max-w-xs">
-                          <span className="inline-block">{task.risk_reason}</span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-center">
+                            <span className="font-medium text-gray-900">
+                              {task.tracked_hours.toFixed(1)}h / {task.allocated_hours.toFixed(1)}h
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-700 max-w-xs">
+                            <span className="inline-block">{task.risk_reason}</span>
+                          </td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Controle de Paginação */}
+              {Math.ceil(riskTasks.length / 15) > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-4">
+                  <button
+                    onClick={() => setRiskTasksPage(Math.max(1, riskTasksPage - 1))}
+                    disabled={riskTasksPage === 1}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    ← Anterior
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    Página {riskTasksPage} de {Math.ceil(riskTasks.length / 15)}
+                  </span>
+                  <button
+                    onClick={() => setRiskTasksPage(Math.min(Math.ceil(riskTasks.length / 15), riskTasksPage + 1))}
+                    disabled={riskTasksPage === Math.ceil(riskTasks.length / 15)}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Próxima →
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
