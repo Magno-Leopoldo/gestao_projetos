@@ -326,7 +326,17 @@ export default function Monitoring() {
 
             for (const task of tasks) {
               // Coletar atribuições da tarefa
-              const assignments = task.assignments_array || [];
+              const assignments = task.assignees_array || [];
+
+              // DEBUG
+              if (assignments.length > 0) {
+                console.log('📋 DEBUG loadAssignmentHistory:', {
+                  task_title: task.title,
+                  assignments_count: assignments.length,
+                  first_assignment: assignments[0],
+                  task_obj_keys: Object.keys(task)
+                });
+              }
 
               for (const assignment of assignments) {
                 const userId = assignment.user_id || assignment.id;
@@ -335,7 +345,7 @@ export default function Monitoring() {
                 history.push({
                   id: `${task.id}-${userId}`, // Fake ID para key
                   user_id: userId,
-                  user_name: assignment.user_name || 'Desconhecido',
+                  user_name: assignment.full_name || assignment.user_name || 'Desconhecido',
                   supervisor_name: supervisor?.full_name || 'N/A',
                   task_id: task.id,
                   task_title: task.title,
@@ -350,6 +360,7 @@ export default function Monitoring() {
           }
         }
       }
+
 
       // Ordenar por data (mais recentes primeiro)
       history.sort((a, b) => new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime());
