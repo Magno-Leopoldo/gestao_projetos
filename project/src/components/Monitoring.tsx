@@ -690,40 +690,40 @@ export default function Monitoring() {
               // Critério 1: Tarefa ATRASADA (devido_date passou)
               if (daysOverdue > 0) {
                 riskLevel = 'critical';
-                riskReason = `Atrasada há ${daysOverdue}d, progresso ${progress}% (${trackedHours}h/${allocatedHours}h)`;
+                riskReason = `Atrasada há ${daysOverdue} dia${daysOverdue > 1 ? 's' : ''}`;
               }
 
               // Critério 2: Tarefa PRESTE A VENCER (menos de 2 dias)
               else if (daysOverdue > -2 && daysOverdue <= 0) {
                 riskLevel = 'high';
                 const daysLeft = Math.abs(daysOverdue);
-                riskReason = `Vence em ${daysLeft}d, progresso ${progress}% (${trackedHours}h/${allocatedHours}h)`;
+                riskReason = `Vence em ${daysLeft} dia${daysLeft > 1 ? 's' : ''}`;
               }
 
               // Critério 3: Progresso muito lento (< 30% com múltiplas atribuições)
               if (progress < 30 && allocatedHours > 0 && daysOverdue > -5) {
                 if (riskLevel === 'medium') riskLevel = 'high';
-                const slowReason = `Progresso lento: ${progress}% (${trackedHours}h de ${allocatedHours}h)`;
+                const slowReason = 'Progresso lento';
                 riskReason = riskReason ? `${riskReason} + ${slowReason}` : slowReason;
               }
 
               // Critério 4: Status "em_análise" sem progresso
               if (task.status === 'analise_tecnica' && progress < 20 && daysOverdue > -5) {
                 if (riskLevel === 'medium') riskLevel = 'high';
-                const analysisReason = `Análise estagnada: ${progress}% (${trackedHours}h/${allocatedHours}h)`;
+                const analysisReason = 'Análise estagnada';
                 riskReason = riskReason ? `${riskReason} + ${analysisReason}` : analysisReason;
               }
 
               // Critério 5: Tarefas com status "refaca" (requerem trabalho extra)
               if (task.status === 'refaca') {
                 riskLevel = 'critical';
-                riskReason = `Requer refação (já investidos ${trackedHours}h)`;
+                riskReason = 'Requer refação';
               }
 
               // Critério 6: Progresso 0% com múltiplas atribuições
               if (progress === 0 && allocatedHours >= 6 && daysOverdue > -5) {
                 if (riskLevel !== 'critical') riskLevel = 'high';
-                const noStartReason = `Sem início: 0% com ${allocatedHours}h alocadas (${trackedHours}h trabalhadas)`;
+                const noStartReason = 'Sem início de execução';
                 riskReason = riskReason ? `${riskReason} + ${noStartReason}` : noStartReason;
               }
 
