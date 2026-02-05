@@ -1,7 +1,8 @@
 # 🐛 Monitoramento - Issues Identificadas
 
-**Data:** 2026-02-04
-**Status:** Em Análise
+**Data Identificação:** 2026-02-04
+**Data Resolução:** 2026-02-05
+**Status:** ✅ TODOS OS BUGS RESOLVIDOS
 **Prioridade:** Alta
 
 ---
@@ -75,6 +76,30 @@ Mas faltava: `ta.assigned_at`
 
 ---
 
+### 5. 🎯 Histórico de Atribuições - Campo com nome incorreto no Frontend
+
+**Problema:** Mesmo após incluir `assigned_at` na API, a Seção 4 continuava mostrando 0 atribuições na tela.
+
+**Root Cause Identificada:**
+Investigação com debug logging revelou que:
+- Backend estava retornando os dados corretamente em `assignees_array`
+- Frontend estava procurando por `task.assignments_array` (nome incorreto)
+- Discrepância no nome do campo causava acesso a `undefined`
+
+**Solução Implementada:**
+- ✅ Alterado frontend linha 329 de: `const assignments = task.assignments_array || [];`
+- ✅ Para: `const assignments = task.assignees_array || [];`
+- ✅ Frontend agora acessa o campo correto retornado pela API
+- ✅ Histórico de Atribuições agora exibe todos os dados corretamente
+
+**Arquivo Corrigido:** `project/src/components/Monitoring.tsx` (Seção 4, função `loadAssignmentHistory`)
+
+**Commit:** `ef7c3de` - fix: Corrigir nome do campo de atribuições no Histórico (assignees_array)
+
+**Status:** ✅ RESOLVIDO
+
+---
+
 ## 📌 Notas Gerais
 
 ### Design Atual - Seção 6
@@ -91,10 +116,35 @@ Mas faltava: `ta.assigned_at`
 
 ## 📁 Commits Relacionados
 
+**Backup e Contexto:**
 - `2ad7a4e` - backup: Estado atual do Monitoramento - 9 seções completas
-- Modificações pendentes: Rating, active_projects, botão Detalhes (não commitadas)
+
+**Resoluções Implementadas:**
+- `bcc3262` - fix: Incluir 'assigned_at' nas queries de assignments (Backend)
+- `ef7c3de` - fix: Corrigir nome do campo de atribuições no Histórico (Frontend)
+- `f5a8c2b` - fix: Remover debug logs do Histórico de Atribuições (Limpeza)
+
+**Modificações não-commitadas:**
+- Rating removal (Seção 2)
+- Active projects fix (Seção 3)
+- Details button removal (Seção 6)
+
+*(Estas mudanças deverão ser commitadas após validação final)*
 
 ---
 
-**Última Atualização:** 2026-02-04
-**Próximo Passo:** Amanhã - Investigar Issue #4 (Histórico de Atribuições)
+## 🎯 Resumo da Resolução
+
+| # | Issue | Root Cause | Solução | Status |
+|---|-------|-----------|---------|--------|
+| 1 | Rating sem base | Lógica arbitrária (rating = % / 20) | Removido campo e renderização | ✅ |
+| 2 | Todos com 5 projetos | Loop atribuía mesmo valor a todos | Incrementar dentro do loop | ✅ |
+| 3 | Botão não funcional | Sem implementação | Removido button | ✅ |
+| 4 | assigned_at não retornado | Queries não selecionavam campo | Adicionar ta.assigned_at | ✅ |
+| 5 | Atribuições ainda vazias | Nome do campo (assignments_array) | Usar assignees_array | ✅ |
+
+---
+
+**Última Atualização:** 2026-02-05
+**Status Final:** ✅ Todas as 5 issues foram identificadas, investigadas e resolvidas
+**Próximo Passo:** Commitare as mudanças do Frontend (Rating, active_projects, Details) e fazer testes end-to-end

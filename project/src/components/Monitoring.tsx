@@ -328,16 +328,6 @@ export default function Monitoring() {
               // Coletar atribuições da tarefa
               const assignments = task.assignees_array || [];
 
-              // DEBUG
-              if (assignments.length > 0) {
-                console.log('📋 DEBUG loadAssignmentHistory:', {
-                  task_title: task.title,
-                  assignments_count: assignments.length,
-                  first_assignment: assignments[0],
-                  task_obj_keys: Object.keys(task)
-                });
-              }
-
               for (const assignment of assignments) {
                 const userId = assignment.user_id || assignment.id;
                 const supervisor = supervisorsMap.get(project.supervisor_id);
