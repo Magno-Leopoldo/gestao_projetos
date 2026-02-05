@@ -665,6 +665,24 @@ export default function Monitoring() {
                 // daysOverdue negativo = ainda tem tempo
               }
 
+              // Calcular horas reais trabalhadas (tracked_hours) para usar nas razões
+              let trackedHours = 0;
+              try {
+                const sessionsResponse = await timeEntriesService.getTaskSessions(task.id);
+                if (sessionsResponse && sessionsResponse.data) {
+                  trackedHours = sessionsResponse.data.reduce(
+                    (sum: number, session: any) => {
+                      const duration = session.duration_hours || 0;
+                      return sum + parseFloat(String(duration));
+                    },
+                    0
+                  );
+                }
+              } catch (error) {
+                console.warn(`Erro ao carregar horas rastreadas da tarefa ${task.id}:`, error);
+                trackedHours = 0;
+              }
+
               // Determinar nível de risco
               let riskLevel: 'critical' | 'high' | 'medium' = 'medium';
               let riskReason = '';
@@ -672,58 +690,45 @@ export default function Monitoring() {
               // Critério 1: Tarefa ATRASADA (devido_date passou)
               if (daysOverdue > 0) {
                 riskLevel = 'critical';
-                riskReason = `Atrasada há ${daysOverdue} dia${daysOverdue > 1 ? 's' : ''}`;
+                riskReason = `Atrasada há ${daysOverdue}d, progresso ${progress}% (${trackedHours}h/${allocatedHours}h)`;
               }
 
               // Critério 2: Tarefa PRESTE A VENCER (menos de 2 dias)
               else if (daysOverdue > -2 && daysOverdue <= 0) {
                 riskLevel = 'high';
-                riskReason = `Vence em ${Math.abs(daysOverdue)} dia${Math.abs(daysOverdue) > 0 ? 's' : ''}`;
+                const daysLeft = Math.abs(daysOverdue);
+                riskReason = `Vence em ${daysLeft}d, progresso ${progress}% (${trackedHours}h/${allocatedHours}h)`;
               }
 
               // Critério 3: Progresso muito lento (< 30% com múltiplas atribuições)
               if (progress < 30 && allocatedHours > 0 && daysOverdue > -5) {
                 if (riskLevel === 'medium') riskLevel = 'high';
-                riskReason = riskReason ? `${riskReason} + Progresso muito lento` : 'Progresso muito lento (<30%)';
+                const slowReason = `Progresso lento: ${progress}% (${trackedHours}h de ${allocatedHours}h)`;
+                riskReason = riskReason ? `${riskReason} + ${slowReason}` : slowReason;
               }
 
               // Critério 4: Status "em_análise" sem progresso
               if (task.status === 'analise_tecnica' && progress < 20 && daysOverdue > -5) {
                 if (riskLevel === 'medium') riskLevel = 'high';
-                riskReason = riskReason ? `${riskReason} + Análise técnica estagnada` : 'Análise técnica estagnada (<20%)';
+                const analysisReason = `Análise estagnada: ${progress}% (${trackedHours}h/${allocatedHours}h)`;
+                riskReason = riskReason ? `${riskReason} + ${analysisReason}` : analysisReason;
               }
 
               // Critério 5: Tarefas com status "refaca" (requerem trabalho extra)
               if (task.status === 'refaca') {
                 riskLevel = 'critical';
-                riskReason = 'Requer refação';
+                riskReason = `Requer refação (já investidos ${trackedHours}h)`;
               }
 
               // Critério 6: Progresso 0% com múltiplas atribuições
               if (progress === 0 && allocatedHours >= 6 && daysOverdue > -5) {
                 if (riskLevel !== 'critical') riskLevel = 'high';
-                riskReason = riskReason ? `${riskReason} + Sem início de execução` : 'Sem início de execução (0%)';
+                const noStartReason = `Sem início: 0% com ${allocatedHours}h alocadas (${trackedHours}h trabalhadas)`;
+                riskReason = riskReason ? `${riskReason} + ${noStartReason}` : noStartReason;
               }
 
               // Apenas adicionar se em risco
               if (riskLevel === 'critical' || riskLevel === 'high') {
-                // Calcular horas reais trabalhadas (tracked_hours)
-                let trackedHours = 0;
-                try {
-                  const sessionsResponse = await timeEntriesService.getTaskSessions(task.id);
-                  if (sessionsResponse && sessionsResponse.data) {
-                    trackedHours = sessionsResponse.data.reduce(
-                      (sum: number, session: any) => {
-                        const duration = session.duration_hours || 0;
-                        return sum + parseFloat(String(duration));
-                      },
-                      0
-                    );
-                  }
-                } catch (error) {
-                  console.warn(`Erro ao carregar horas rastreadas da tarefa ${task.id}:`, error);
-                  trackedHours = 0;
-                }
 
                 tasks.push({
                   id: task.id,
