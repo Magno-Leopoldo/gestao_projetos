@@ -65,7 +65,7 @@ const TaskDetail: React.FC = () => {
       };
       reloadAssignees();
     }
-  }, [isDailyHoursDetailsOpen]);
+  }, [isDailyHoursDetailsOpen, projectId, stageId, taskId, user]);
 
   // NOVO: Recarregar histórico ao mudar filtros
   useEffect(() => {
