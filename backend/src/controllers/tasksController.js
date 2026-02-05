@@ -161,7 +161,7 @@ export const getTasksByStage = async (req, res, next) => {
     let formattedTasks = await Promise.all(
       tasks.map(async (task) => {
         const assignees = await query(
-          `SELECT u.id, u.full_name, u.email, u.role, ta.daily_hours
+          `SELECT u.id, u.full_name, u.email, u.role, ta.daily_hours, ta.assigned_at
            FROM users u
            INNER JOIN task_assignments ta ON u.id = ta.user_id
            WHERE ta.task_id = ?`,
@@ -257,7 +257,7 @@ export const getTaskById = async (req, res, next) => {
 
     // Buscar usuários atribuídos
     const assignees = await query(
-      `SELECT u.id, u.email, u.full_name, u.role, ta.daily_hours
+      `SELECT u.id, u.email, u.full_name, u.role, ta.daily_hours, ta.assigned_at
        FROM users u
        INNER JOIN task_assignments ta ON u.id = ta.user_id
        WHERE ta.task_id = ?`,
