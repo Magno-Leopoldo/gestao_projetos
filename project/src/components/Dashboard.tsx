@@ -63,10 +63,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (profile) {
-      loadDashboardData();
-    }
-  }, [profile]);
+    loadDashboardData();
+  }, []);
 
   async function loadDashboardData() {
     try {

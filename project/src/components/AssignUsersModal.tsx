@@ -53,7 +53,7 @@ const AssignUsersModal: React.FC<AssignUsersModalProps> = ({
       });
       setUserDailyHours(initialHours);
     }
-  }, [isOpen, currentAssignees, taskDailyHours, taskId]);
+  }, [isOpen, currentAssignees, taskDailyHours]);
 
 
   const validateDependencies = async () => {
