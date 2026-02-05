@@ -189,11 +189,12 @@ export default function Monitoring() {
     }
   }, [filters.supervisorId, supervisors]);
 
-  // Reload assignment history and risk tasks when filters change
+  // Reload assignment history, risk tasks and tasks with collaborators when filters change
   useEffect(() => {
     if (supervisors.length > 0) {
       loadAssignmentHistory();
       loadRiskTasks();
+      loadTasksWithMostCollaborators();
     }
   }, [filters.supervisorId, supervisors]);
 
