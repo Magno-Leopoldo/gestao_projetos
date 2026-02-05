@@ -206,7 +206,7 @@ export default function Monitoring() {
       loadAssignmentHistory();
       loadRiskTasks();
     }
-  }, [filters.supervisorId]);
+  }, [filters.supervisorId, supervisors]);
 
   async function loadMonitoringData() {
     try {
@@ -287,8 +287,8 @@ export default function Monitoring() {
       // Carregar dados de carga de trabalho da equipe
       await loadTeamMembersWorkload(supervisorsList);
 
-      // Carregar histórico de atribuições
-      await loadAssignmentHistory();
+      // Carregar histórico de atribuições (passar supervisorsList para evitar timing issues com state)
+      await loadAssignmentHistory(supervisorsList);
     } catch (error) {
       console.error('Erro ao carregar dados de monitoramento:', error);
     } finally {
@@ -296,7 +296,7 @@ export default function Monitoring() {
     }
   }
 
-  async function loadAssignmentHistory() {
+  async function loadAssignmentHistory(supervisorsList?: Supervisor[]) {
     try {
       const history: AssignmentHistory[] = [];
       const today = new Date();
@@ -307,7 +307,9 @@ export default function Monitoring() {
       // Carregar todos os projetos e suas tarefas
       const allProjects = await projectsService.getAll({ include: 'stages' });
       let supervisorsMap = new Map<number, Supervisor>();
-      supervisors.forEach((s) => supervisorsMap.set(s.id, s));
+      // Usar supervisorsList passado como parâmetro, ou fallback para state 'supervisors'
+      const supsToUse = supervisorsList || supervisors;
+      supsToUse.forEach((s) => supervisorsMap.set(s.id, s));
 
       // Determinar filtro de supervisor (se houver)
       let filteredProjects = allProjects;
@@ -1320,7 +1322,7 @@ export default function Monitoring() {
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">ALOCADO</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">RASTREADO</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">DIFERENÇA</th>
-                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">PROJETOS</th>
+                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">TAREFAS</th>
                     <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">STATUS</th>
                   </tr>
                 </thead>
