@@ -85,7 +85,6 @@ interface AssignmentAnalysis {
     average: number;
     mode: string;
     median: number;
-    errorRate: number;
   };
   dailyTrend: Array<{ day: string; count: number }>;
 }
@@ -153,7 +152,6 @@ export default function Monitoring() {
       average: 0,
       mode: '0h',
       median: 0,
-      errorRate: 0,
     },
     dailyTrend: [],
   });
@@ -752,9 +750,6 @@ export default function Monitoring() {
       });
       const dailyTrend = Array.from(dayMap.entries()).map(([day, count]) => ({ day, count }));
 
-      // Taxa de erro (considerando 0 de erro para agora)
-      const errorRate = 0;
-
       setAssignmentAnalysis({
         byUser,
         bySupervisor,
@@ -763,7 +758,6 @@ export default function Monitoring() {
           average: Math.round(average * 10) / 10,
           mode: `${mode}h`,
           median: Math.round(median * 10) / 10,
-          errorRate,
         },
         dailyTrend,
       });
@@ -1643,10 +1637,6 @@ export default function Monitoring() {
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Mediana:</span>
                     <span className="font-semibold text-gray-900">{assignmentAnalysis.statistics.median}h</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Taxa de Erro:</span>
-                    <span className="font-semibold text-gray-900">{assignmentAnalysis.statistics.errorRate}%</span>
                   </div>
                 </div>
               </div>
