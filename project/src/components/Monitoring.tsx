@@ -34,7 +34,6 @@ interface SupervisorPerformance {
   refacaTasks: number;
   completionRate: number;
   teamSize: number;
-  avgHours: number;
   status: 'excelente' | 'bom' | 'atencao';
 }
 
@@ -54,8 +53,6 @@ interface TeamMemberWorkload {
   allocated_hours: number;  // Sum of daily_hours from assignments
   tracked_hours: number;    // Sum from time entries
   active_projects: number;
-  completion_rate: number;  // % of completed tasks
-  member_since_days: number; // Days in the team
   status: 'no_limite' | 'atencao' | 'ok'; // Based on allocated vs limit
 }
 
@@ -259,7 +256,6 @@ export default function Monitoring() {
             refacaTasks,
             completionRate,
             teamSize: teamMembers.size,
-            avgHours: 0, // TODO: Calcular de verdade se necessário
             status,
           });
         } catch (error) {
@@ -825,8 +821,6 @@ export default function Monitoring() {
                         allocated_hours: 0,
                         tracked_hours: 0,
                         active_projects: 0,
-                        completion_rate: 0,
-                        member_since_days: 0,
                         status: 'ok',
                       });
                     }
@@ -1335,7 +1329,7 @@ export default function Monitoring() {
                           <div>
                             <p className="font-medium text-gray-900">👤 {member.user_name}</p>
                             <p className="text-xs text-gray-500 mt-1">
-                              Desde: {member.member_since_days > 0 ? `${member.member_since_days}d` : 'Novo'}
+                              {member.active_projects} tarefa{member.active_projects !== 1 ? 's' : ''} ativa{member.active_projects !== 1 ? 's' : ''}
                             </p>
                           </div>
                         </td>
