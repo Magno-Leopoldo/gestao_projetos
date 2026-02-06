@@ -1257,7 +1257,7 @@ export default function Monitoring() {
                           }`}
                         >
                           {perf.status === 'excelente'
-                            ? '🟢 Excelente'
+                            ? <><Star className="inline w-3.5 h-3.5 mr-1 fill-green-500 text-green-500" />Excelente</>
                             : perf.status === 'bom'
                             ? '🟢 Bom'
                             : '🟡 Atenção'}
@@ -1309,9 +1309,9 @@ export default function Monitoring() {
                     };
 
                     const statusBadges = {
-                      'no_limite': { emoji: '🔴', text: 'NO LIMITE', color: 'bg-red-200 text-red-800' },
-                      'atencao': { emoji: '🟡', text: 'ATENÇÃO', color: 'bg-yellow-200 text-yellow-800' },
-                      'ok': { emoji: '🟢', text: 'OK', color: 'bg-green-200 text-green-800' },
+                      'no_limite': { text: 'NO LIMITE', color: 'bg-red-200 text-red-800', useAlertIcon: true },
+                      'atencao': { text: 'ATENÇÃO', color: 'bg-yellow-200 text-yellow-800', useAlertIcon: false },
+                      'ok': { text: 'OK', color: 'bg-green-200 text-green-800', useAlertIcon: false },
                     };
 
                     const badge = statusBadges[member.status];
@@ -1384,7 +1384,10 @@ export default function Monitoring() {
                         {/* Status */}
                         <td className="px-6 py-4 text-center">
                           <span className={`px-3 py-1 rounded-full text-xs font-semibold ${badge.color}`}>
-                            {badge.emoji} {badge.text}
+                            {badge.useAlertIcon
+                              ? <><AlertCircle className="inline w-3.5 h-3.5 mr-1" />{badge.text}</>
+                              : <>{member.status === 'atencao' ? '🟡' : '🟢'} {badge.text}</>
+                            }
                           </span>
                         </td>
                       </tr>
@@ -1664,7 +1667,10 @@ export default function Monitoring() {
 
         {/* ===== SEÇÃO 6: TAREFAS EM RISCO ===== */}
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">⚠️ Tarefas em Risco</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+            <AlertCircle className="w-6 h-6 text-red-500" />
+            Tarefas em Risco
+          </h2>
 
           {riskTasks.length === 0 ? (
             <div className="bg-green-50 rounded-lg shadow-sm border border-green-200 p-8 text-center">
