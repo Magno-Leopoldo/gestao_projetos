@@ -384,9 +384,6 @@ export default function Monitoring() {
       // Carregar tarefas em risco (passar supervisorsList para evitar timing issues com state)
       await loadRiskTasks(supervisorsList);
 
-      // Calcular estatísticas de horas rastreadas
-      await calculateTrackedHoursStats();
-
       // Carregar top 5 tarefas por horas e distribuição de status
       await loadTopTasks();
       await loadStatusDistribution();
