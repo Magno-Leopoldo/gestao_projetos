@@ -104,7 +104,8 @@ interface RiskTask {
   progress: number; // 0-100
   allocated_hours: number;
   tracked_hours: number;
-  days_overdue: number; // Negativo se atrasado
+  days_overdue: number; // Positivo = atrasado, Negativo = ainda tem tempo
+  due_date: string | null;
   risk_level: 'critical' | 'high' | 'medium'; // 🔴 🟠 🟡
   risk_reason: string; // Por que está em risco
 }
@@ -172,6 +173,7 @@ export default function Monitoring() {
   const [riskTasksPage, setRiskTasksPage] = useState(1);
   const [riskTasksSortBy, setRiskTasksSortBy] = useState<'risk_level' | 'days_overdue' | 'progress' | 'title'>('risk_level');
   const [riskTasksSortDesc, setRiskTasksSortDesc] = useState(true);
+  const [selectedRiskTask, setSelectedRiskTask] = useState<RiskTask | null>(null);
   const [tasksWithCollaborators, setTasksWithCollaborators] = useState<TaskWithCollaborators[]>([]);
   const [topTasks, setTopTasks] = useState<TopTask[]>([]);
   const [statusDistribution, setStatusDistribution] = useState<StatusDistribution[]>([]);
@@ -745,8 +747,9 @@ export default function Monitoring() {
                   status: task.status,
                   progress,
                   allocated_hours: allocatedHours,
-                  tracked_hours: Math.round(trackedHours * 10) / 10, // Horas reais rastreadas
+                  tracked_hours: Math.round(trackedHours * 10) / 10,
                   days_overdue: daysOverdue,
+                  due_date: task.due_date || null,
                   risk_level: riskLevel,
                   risk_reason: riskReason,
                 });
@@ -1920,7 +1923,7 @@ export default function Monitoring() {
                       };
 
                       return paginatedTasks.map((task, index) => (
-                        <tr key={task.id} className="hover:bg-gray-50">
+                        <tr key={task.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedRiskTask(task)}>
                           <td className="px-6 py-4 text-sm font-medium text-gray-900">{start + index + 1}</td>
                           <td className="px-6 py-4 text-sm">
                             <p className="font-medium text-gray-900">{task.title}</p>
@@ -1993,6 +1996,152 @@ export default function Monitoring() {
             </div>
           )}
         </div>
+
+        {/* ===== MODAL: DETALHES DA TAREFA EM RISCO ===== */}
+        {selectedRiskTask && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={() => setSelectedRiskTask(null)}>
+            <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className={`px-6 py-4 rounded-t-lg ${
+                selectedRiskTask.risk_level === 'critical' ? 'bg-red-50 border-b border-red-200' :
+                selectedRiskTask.risk_level === 'high' ? 'bg-orange-50 border-b border-orange-200' :
+                'bg-yellow-50 border-b border-yellow-200'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">
+                      {selectedRiskTask.risk_level === 'critical' ? '🔴' : selectedRiskTask.risk_level === 'high' ? '🟠' : '🟡'}
+                    </span>
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                      selectedRiskTask.risk_level === 'critical' ? 'bg-red-200 text-red-800' :
+                      selectedRiskTask.risk_level === 'high' ? 'bg-orange-200 text-orange-800' :
+                      'bg-yellow-200 text-yellow-800'
+                    }`}>
+                      {selectedRiskTask.risk_level === 'critical' ? 'CRÍTICO' : selectedRiskTask.risk_level === 'high' ? 'RISCO' : 'ATENÇÃO'}
+                    </span>
+                  </div>
+                  <button onClick={() => setSelectedRiskTask(null)} className="text-gray-500 hover:text-gray-700 text-xl font-bold">
+                    ✕
+                  </button>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mt-2">{selectedRiskTask.title}</h3>
+                <p className="text-sm text-gray-600">{selectedRiskTask.project_name}</p>
+              </div>
+
+              {/* Detalhes */}
+              <div className="px-6 py-4 space-y-4">
+                {/* Info Grid */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Supervisor</p>
+                    <p className="text-sm font-medium text-gray-900">{selectedRiskTask.supervisor_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Responsável</p>
+                    <p className="text-sm font-medium text-gray-900">{selectedRiskTask.responsible_user}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Status</p>
+                    <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                      selectedRiskTask.status === 'novo' ? 'bg-gray-100 text-gray-800' :
+                      selectedRiskTask.status === 'em_desenvolvimento' ? 'bg-blue-100 text-blue-800' :
+                      selectedRiskTask.status === 'analise_tecnica' ? 'bg-purple-100 text-purple-800' :
+                      selectedRiskTask.status === 'refaca' ? 'bg-red-100 text-red-800' :
+                      'bg-green-100 text-green-800'
+                    }`}>
+                      {selectedRiskTask.status === 'novo' ? 'Novo' :
+                       selectedRiskTask.status === 'em_desenvolvimento' ? 'Em Desenvolvimento' :
+                       selectedRiskTask.status === 'analise_tecnica' ? 'Análise Técnica' :
+                       selectedRiskTask.status === 'refaca' ? 'Refação' :
+                       selectedRiskTask.status === 'concluido' ? 'Concluído' : selectedRiskTask.status}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Data de Vencimento</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      {selectedRiskTask.due_date
+                        ? new Date(selectedRiskTask.due_date).toLocaleDateString('pt-BR')
+                        : 'Não definido'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Razão do Risco */}
+                <div className={`p-3 rounded-lg ${
+                  selectedRiskTask.risk_level === 'critical' ? 'bg-red-50' :
+                  selectedRiskTask.risk_level === 'high' ? 'bg-orange-50' :
+                  'bg-yellow-50'
+                }`}>
+                  <p className="text-xs text-gray-500 uppercase mb-1">Razão do Risco</p>
+                  <p className={`text-sm font-medium ${
+                    selectedRiskTask.risk_level === 'critical' ? 'text-red-800' :
+                    selectedRiskTask.risk_level === 'high' ? 'text-orange-800' :
+                    'text-yellow-800'
+                  }`}>
+                    {selectedRiskTask.risk_reason}
+                    {selectedRiskTask.days_overdue > 0 && ` (${selectedRiskTask.days_overdue} dia${selectedRiskTask.days_overdue > 1 ? 's' : ''} de atraso)`}
+                    {selectedRiskTask.days_overdue < 0 && ` (vence em ${Math.abs(selectedRiskTask.days_overdue)} dia${Math.abs(selectedRiskTask.days_overdue) > 1 ? 's' : ''})`}
+                  </p>
+                </div>
+
+                {/* Progresso */}
+                <div>
+                  <p className="text-xs text-gray-500 uppercase mb-2">Progresso</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 bg-gray-200 rounded-full h-3">
+                      <div
+                        className={`h-3 rounded-full ${
+                          selectedRiskTask.progress >= 75 ? 'bg-green-500' : selectedRiskTask.progress >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                        }`}
+                        style={{ width: `${selectedRiskTask.progress}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900 w-12 text-right">{selectedRiskTask.progress}%</span>
+                  </div>
+                </div>
+
+                {/* Horas */}
+                <div>
+                  <p className="text-xs text-gray-500 uppercase mb-2">Horas</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 bg-gray-200 rounded-full h-3">
+                      <div
+                        className={`h-3 rounded-full ${
+                          selectedRiskTask.allocated_hours > 0 && (selectedRiskTask.tracked_hours / selectedRiskTask.allocated_hours) > 0.8 ? 'bg-red-500' :
+                          selectedRiskTask.allocated_hours > 0 && (selectedRiskTask.tracked_hours / selectedRiskTask.allocated_hours) > 0.5 ? 'bg-yellow-500' :
+                          'bg-blue-500'
+                        }`}
+                        style={{ width: `${selectedRiskTask.allocated_hours > 0 ? Math.min((selectedRiskTask.tracked_hours / selectedRiskTask.allocated_hours) * 100, 100) : 0}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900 w-20 text-right">
+                      {selectedRiskTask.tracked_hours.toFixed(1)}h / {selectedRiskTask.allocated_hours.toFixed(1)}h
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Botões de Ação */}
+              <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-lg">
+                <p className="text-xs text-gray-500 uppercase mb-3">Ações</p>
+                <div className="flex flex-wrap gap-2">
+                  <button className="inline-flex items-center gap-1 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
+                    ↻ Reatribuir
+                  </button>
+                  <button className="inline-flex items-center gap-1 px-3 py-2 text-sm font-medium text-purple-700 bg-purple-100 rounded-lg hover:bg-purple-200 transition-colors">
+                    📝 Adicionar Nota
+                  </button>
+                  <button className="inline-flex items-center gap-1 px-3 py-2 text-sm font-medium text-orange-700 bg-orange-100 rounded-lg hover:bg-orange-200 transition-colors">
+                    ⬆️ Prioridade
+                  </button>
+                  <button className="inline-flex items-center gap-1 px-3 py-2 text-sm font-medium text-green-700 bg-green-100 rounded-lg hover:bg-green-200 transition-colors">
+                    ✅ Marcar Resolvido
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ===== SEÇÃO 7: TOP 5 TAREFAS COM MAIS COLABORADORES ===== */}
         <div className="mb-8">
