@@ -2209,9 +2209,8 @@ export default function Monitoring() {
                   <p className="text-sm text-gray-600">Requerem Ação</p>
                   <p className="text-2xl font-bold text-red-600 mt-1">
                     {Math.round(
-                      ((statusDistribution.find((s) => s.status === 'refaca')?.percentage || 0) +
-                        (statusDistribution.find((s) => s.status === 'analise_tecnica')?.percentage || 0)) /
-                        2
+                      (statusDistribution.find((s) => s.status === 'refaca')?.percentage || 0) +
+                        (statusDistribution.find((s) => s.status === 'analise_tecnica')?.percentage || 0)
                     )}%
                   </p>
                 </div>
