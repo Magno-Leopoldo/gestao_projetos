@@ -1299,7 +1299,7 @@ export default function Monitoring() {
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">MEMBRO</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">SUPERVISOR</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">ALOCADO</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">RASTREADO</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">RASTREADO (HOJE)</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">DIFERENÇA</th>
                     <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">TAREFAS</th>
                     <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">STATUS</th>
