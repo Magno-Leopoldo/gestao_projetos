@@ -121,15 +121,6 @@ interface TaskWithCollaborators {
   progress: number;
 }
 
-interface TopTask {
-  id: number;
-  title: string;
-  project_name: string;
-  hours_tracked: number;
-  team_size: number;
-  progress: number;
-  status: TaskStatus;
-}
 
 interface StatusDistribution {
   status: TaskStatus;
@@ -175,7 +166,6 @@ export default function Monitoring() {
   const [riskTasksSortDesc, setRiskTasksSortDesc] = useState(true);
   const [selectedRiskTask, setSelectedRiskTask] = useState<RiskTask | null>(null);
   const [tasksWithCollaborators, setTasksWithCollaborators] = useState<TaskWithCollaborators[]>([]);
-  const [topTasks, setTopTasks] = useState<TopTask[]>([]);
   const [statusDistribution, setStatusDistribution] = useState<StatusDistribution[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -384,107 +374,11 @@ export default function Monitoring() {
       // Carregar tarefas em risco (passar supervisorsList para evitar timing issues com state)
       await loadRiskTasks(supervisorsList);
 
-      // Carregar top 5 tarefas por horas e distribuição de status
-      await loadTopTasks();
+      // Carregar distribuição de status
       await loadStatusDistribution();
     } catch (error) {
       console.error('Erro ao carregar histórico de atribuições:', error);
       setAssignmentHistory([]);
-    }
-  }
-
-  async function loadTopTasks() {
-    try {
-      const tasks: TopTask[] = [];
-      const allProjects = await projectsService.getAll({ include: 'stages' });
-
-      // Determinar filtro de supervisor
-      let filteredProjects = allProjects;
-      if (filters.supervisorId) {
-        filteredProjects = allProjects.filter(
-          (p: any) => p.supervisor_id === filters.supervisorId
-        );
-      }
-
-      // Mapa para contar horas e equipes por tarefa
-      const taskMetrics = new Map<number, {
-        task_id: number;
-        title: string;
-        project_name: string;
-        team_members: Set<number>;
-        total_hours: number;
-        status: string;
-      }>();
-
-      // Coletar dados REAIS de time_entries e assignments
-      for (const project of filteredProjects) {
-        if (project.stages && Array.isArray(project.stages)) {
-          for (const stage of project.stages) {
-            const stageTasks = await tasksService.getByStage(stage.id);
-            const projectTasks = stageTasks.data || [];
-
-            for (const task of projectTasks) {
-              // Contar equipe via assignees_array (dados REAIS do banco)
-              const teamMembers = (task.assignees_array || [])
-                .map((a: any) => a.user_id || a.id)
-                .filter((id: number) => id);
-
-              // Se tarefa tem equipe, incluir no mapa
-              if (teamMembers.length > 0) {
-                if (!taskMetrics.has(task.id)) {
-                  taskMetrics.set(task.id, {
-                    task_id: task.id,
-                    title: task.title,
-                    project_name: project.name,
-                    team_members: new Set(teamMembers),
-                    total_hours: 0,
-                    status: task.status,
-                  });
-                }
-
-                // Somar horas via daily_hours alocadas (dados REAIS)
-                const allocatedHours = teamMembers.reduce((sum: number, _: number) => {
-                  const assignment = (task.assignees_array || []).find(
-                    (a: any) => (a.user_id || a.id) === _
-                  );
-                  return sum + (parseFloat(String(assignment?.daily_hours)) || 0);
-                }, 0);
-
-                const metric = taskMetrics.get(task.id);
-                if (metric) {
-                  metric.total_hours = allocatedHours;
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // Converter mapa para array e ordenar por team_size (desc), depois por horas (desc)
-      const topTasksArray = Array.from(taskMetrics.values())
-        .map((metric) => ({
-          id: metric.task_id,
-          title: metric.title,
-          project_name: metric.project_name,
-          hours_tracked: metric.total_hours,
-          team_size: metric.team_members.size,
-          progress: 0, // Campo não existe em tasks, manter como 0
-          status: metric.status,
-        }))
-        .sort((a, b) => {
-          // Ordenar por team_size DESC (prioridade 1)
-          if (b.team_size !== a.team_size) {
-            return b.team_size - a.team_size;
-          }
-          // Desempate: ordenar por horas DESC (prioridade 2)
-          return b.hours_tracked - a.hours_tracked;
-        })
-        .slice(0, 5);
-
-      setTopTasks(topTasksArray);
-    } catch (error) {
-      console.error('Erro ao carregar top tarefas:', error);
-      setTopTasks([]);
     }
   }
 
@@ -2229,68 +2123,7 @@ export default function Monitoring() {
           )}
         </div>
 
-        {/* ===== SEÇÃO 8: TOP 5 TAREFAS POR HORAS ===== */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">🏅 Top 5 Tarefas por Horas</h2>
-
-          {topTasks.length === 0 ? (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-600">
-              <p>Nenhuma tarefa encontrada</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto bg-white rounded-lg shadow-sm border border-gray-200">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">#</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">TAREFA / PROJETO</th>
-                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">HORAS</th>
-                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">EQUIPE</th>
-                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700">PROGRESSO</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {topTasks.map((task, index) => {
-                    const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
-
-                    return (
-                      <tr key={task.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 text-center">
-                          <span className="text-2xl">{medals[index]}</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <p className="text-sm font-medium text-gray-900">{task.title}</p>
-                          <p className="text-xs text-gray-500">{task.project_name}</p>
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <p className="text-sm font-semibold text-gray-900">{task.hours_tracked}h</p>
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <p className="text-sm font-semibold text-gray-900">{task.team_size} pessoa(s)</p>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <div className="w-24 h-2 bg-gray-300 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full ${
-                                  task.progress >= 75 ? 'bg-green-500' : task.progress >= 50 ? 'bg-yellow-500' : 'bg-blue-500'
-                                }`}
-                                style={{ width: `${task.progress}%` }}
-                              />
-                            </div>
-                            <span className="text-xs font-medium text-gray-700">{task.progress}%</span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* ===== SEÇÃO 9: DISTRIBUIÇÃO DE STATUS ===== */}
+        {/* ===== SEÇÃO 8: DISTRIBUIÇÃO DE STATUS ===== */}
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">📊 Distribuição de Status</h2>
 
