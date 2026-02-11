@@ -557,6 +557,19 @@ const TasksList: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Banner de Refação */}
+                  {task.status === 'refaca' && task.latest_refacao_reason && (
+                    <div className="mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                      <span className="text-red-500 flex-shrink-0">⚠️</span>
+                      <p className="text-sm text-red-800 truncate">
+                        <span className="font-medium">Motivo:</span> "{task.latest_refacao_reason}"
+                        {task.latest_refacao_changed_by && (
+                          <span className="text-red-600"> — {task.latest_refacao_changed_by}</span>
+                        )}
+                      </p>
+                    </div>
+                  )}
+
                   {/* Assignees Section */}
                   {task.assignees_array && task.assignees_array.length > 0 && (
                     <div className="mt-4 pt-4 border-t border-gray-200">

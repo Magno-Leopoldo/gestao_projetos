@@ -136,7 +136,16 @@ export const getTasksByStage = async (req, res, next) => {
     const tasks = await query(
       `SELECT t.*,
         GROUP_CONCAT(u.id) as assignee_ids,
-        GROUP_CONCAT(u.full_name SEPARATOR ', ') as assignees
+        GROUP_CONCAT(u.full_name SEPARATOR ', ') as assignees,
+        (SELECT tsh.reason FROM task_status_history tsh
+         WHERE tsh.task_id = t.id AND tsh.to_status = 'refaca'
+         ORDER BY tsh.changed_at DESC LIMIT 1) as latest_refacao_reason,
+        (SELECT tsh.changed_by_name FROM task_status_history tsh
+         WHERE tsh.task_id = t.id AND tsh.to_status = 'refaca'
+         ORDER BY tsh.changed_at DESC LIMIT 1) as latest_refacao_changed_by,
+        (SELECT tsh.changed_at FROM task_status_history tsh
+         WHERE tsh.task_id = t.id AND tsh.to_status = 'refaca'
+         ORDER BY tsh.changed_at DESC LIMIT 1) as latest_refacao_date
       FROM tasks t
       LEFT JOIN task_assignments ta ON t.id = ta.task_id
       LEFT JOIN users u ON ta.user_id = u.id
@@ -239,7 +248,16 @@ export const getTaskById = async (req, res, next) => {
         t.*,
         ps.name as stage_name,
         ps.project_id,
-        p.name as project_name
+        p.name as project_name,
+        (SELECT tsh.reason FROM task_status_history tsh
+         WHERE tsh.task_id = t.id AND tsh.to_status = 'refaca'
+         ORDER BY tsh.changed_at DESC LIMIT 1) as latest_refacao_reason,
+        (SELECT tsh.changed_by_name FROM task_status_history tsh
+         WHERE tsh.task_id = t.id AND tsh.to_status = 'refaca'
+         ORDER BY tsh.changed_at DESC LIMIT 1) as latest_refacao_changed_by,
+        (SELECT tsh.changed_at FROM task_status_history tsh
+         WHERE tsh.task_id = t.id AND tsh.to_status = 'refaca'
+         ORDER BY tsh.changed_at DESC LIMIT 1) as latest_refacao_date
       FROM tasks t
       INNER JOIN project_stages ps ON t.stage_id = ps.id
       INNER JOIN projects p ON ps.project_id = p.id
@@ -725,8 +743,15 @@ export const updateTaskStatus = async (req, res, next) => {
       });
     }
 
-    // Atualizar status
-    await query('UPDATE tasks SET status = ? WHERE id = ?', [status, id]);
+    // Atualizar status e salvar histórico atomicamente
+    await transaction(async (conn) => {
+      await conn.execute('UPDATE tasks SET status = ? WHERE id = ?', [status, id]);
+      await conn.execute(
+        `INSERT INTO task_status_history (task_id, from_status, to_status, reason, changed_by, changed_by_name)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [id, task.status, status, reason || null, req.user.id, req.user.full_name]
+      );
+    });
 
     // Buscar tarefa atualizada
     const [updatedTask] = await query('SELECT * FROM tasks WHERE id = ?', [id]);
@@ -736,6 +761,20 @@ export const updateTaskStatus = async (req, res, next) => {
       message: `Status alterado para '${status}' com sucesso`,
       data: updatedTask,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /api/tasks/:id/status-history - Obter histórico de mudanças de status
+export const getTaskStatusHistory = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const history = await query(
+      `SELECT * FROM task_status_history WHERE task_id = ? ORDER BY changed_at DESC`,
+      [id]
+    );
+    res.json({ success: true, data: history });
   } catch (error) {
     next(error);
   }

@@ -9,6 +9,7 @@ import stagesRoutes from './routes/stagesRoutes.js';
 import tasksRoutes from './routes/tasksRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import usersRoutes from './routes/usersRoutes.js';
+import calendarRoutes from './routes/calendarRoutes.js';
 
 // Carregar variáveis de ambiente
 dotenv.config();
@@ -51,6 +52,7 @@ app.use('/api/stages', stagesRoutes);
 app.use('/api/tasks', tasksRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/calendar', calendarRoutes);
 
 // Middleware de rota não encontrada
 app.use(notFound);

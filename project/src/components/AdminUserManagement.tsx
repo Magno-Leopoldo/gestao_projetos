@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { usersService } from '../services/usersService';
 import { authService } from '../services/authService';
+import { useAuth } from '../contexts/AuthContext';
 import { User } from '../types';
-import { Key, AlertCircle, CheckCircle, X } from 'lucide-react';
+import { Key, AlertCircle, CheckCircle, X, Search } from 'lucide-react';
 
 const AdminUserManagement: React.FC = () => {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Modal de reset de senha
   const [resetModal, setResetModal] = useState<{
@@ -30,6 +33,17 @@ const AdminUserManagement: React.FC = () => {
   useEffect(() => {
     loadUsers();
   }, []);
+
+  // Auto-clear messages after 4 seconds
+  useEffect(() => {
+    if (success || error) {
+      const timer = setTimeout(() => {
+        setSuccess(null);
+        setError(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [success, error]);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -81,22 +95,13 @@ const AdminUserManagement: React.FC = () => {
     setSuccess(null);
 
     try {
-      const result = await authService.adminResetUserPassword(
+      await authService.adminResetUserPassword(
         resetModal.userId,
         resetModal.newPassword
       );
 
-      setSuccess(
-        `✅ Senha de ${resetModal.userName} resetada com sucesso!\n\n` +
-        `Nova senha: ${resetModal.newPassword}\n\n` +
-        `⚠️ Compartilhe com o usuário de forma segura`
-      );
-
-      // Fechar modal após 2 segundos
-      setTimeout(() => {
-        closeResetModal();
-        setSuccess(null);
-      }, 2000);
+      setSuccess(`Senha de ${resetModal.userName} resetada com sucesso`);
+      closeResetModal();
     } catch (err: any) {
       const errorMsg =
         err.response?.data?.message || err.message || 'Erro ao resetar senha';
@@ -106,13 +111,53 @@ const AdminUserManagement: React.FC = () => {
     }
   };
 
-  const getRoleLabel = (role: string) => {
-    const labels: Record<string, string> = {
+  const handleRoleChange = async (userId: number, userName: string, newRole: string) => {
+    const roleLabels: Record<string, string> = {
       user: 'Usuário',
       supervisor: 'Supervisor',
       admin: 'Administrador',
     };
-    return labels[role] || role;
+
+    if (!confirm(`Alterar perfil de ${userName} para ${roleLabels[newRole] || newRole}?`)) {
+      return;
+    }
+
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const result = await usersService.updateRole(userId, newRole);
+      setUsers(prev =>
+        prev.map(u => (u.id === userId ? { ...u, ...result.data } : u))
+      );
+      setSuccess(`Perfil de ${userName} alterado para ${roleLabels[newRole]}`);
+    } catch (err: any) {
+      const errorMsg =
+        err.response?.data?.message || err.message || 'Erro ao alterar perfil';
+      setError(errorMsg);
+    }
+  };
+
+  const handleToggleActive = async (userId: number, userName: string, currentlyActive: boolean) => {
+    const action = currentlyActive ? 'desativar' : 'ativar';
+    if (!confirm(`Deseja ${action} o usuário ${userName}?`)) {
+      return;
+    }
+
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const result = await usersService.toggleActive(userId);
+      setUsers(prev =>
+        prev.map(u => (u.id === userId ? { ...u, ...result.data } : u))
+      );
+      setSuccess(result.message || `Usuário ${userName} ${currentlyActive ? 'desativado' : 'ativado'}`);
+    } catch (err: any) {
+      const errorMsg =
+        err.response?.data?.message || err.message || `Erro ao ${action} usuário`;
+      setError(errorMsg);
+    }
   };
 
   const getRoleColor = (role: string) => {
@@ -124,11 +169,22 @@ const AdminUserManagement: React.FC = () => {
     return colors[role] || 'bg-gray-100 text-gray-800';
   };
 
+  const filteredUsers = users.filter(u => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      u.full_name.toLowerCase().includes(term) ||
+      u.email.toLowerCase().includes(term)
+    );
+  });
+
+  const isSelf = (userId: number) => currentUser?.id === userId;
+
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Gerenciar Usuários</h2>
-        <p className="text-gray-600 mt-1">Resetar senhas e gerenciar permissões</p>
+        <h2 className="text-2xl font-bold text-gray-900">Configurações</h2>
+        <p className="text-gray-600 mt-1">Gerenciar usuários, perfis e permissões</p>
       </div>
 
       {/* Error Message */}
@@ -153,6 +209,18 @@ const AdminUserManagement: React.FC = () => {
         </div>
       )}
 
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+        <input
+          type="text"
+          placeholder="Buscar por nome ou email..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm bg-white"
+        />
+      </div>
+
       {/* Loading */}
       {loading && (
         <div className="flex justify-center items-center py-12">
@@ -161,7 +229,7 @@ const AdminUserManagement: React.FC = () => {
       )}
 
       {/* Users Table */}
-      {!loading && users.length > 0 && (
+      {!loading && filteredUsers.length > 0 && (
         <div className="overflow-x-auto bg-white rounded-lg shadow">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
@@ -184,27 +252,51 @@ const AdminUserManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {users.map((user) => (
-                <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+              {filteredUsers.map((user) => (
+                <tr key={user.id} className={`hover:bg-gray-50 transition-colors ${!user.is_active ? 'opacity-60' : ''}`}>
                   <td className="px-6 py-4 text-sm text-gray-900 font-medium">
-                    {user.full_name}
+                    <div className="flex items-center gap-2">
+                      {user.full_name}
+                      {isSelf(user.id) && (
+                        <span className="text-xs text-gray-400">(você)</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-600">{user.email}</td>
                   <td className="px-6 py-4 text-sm">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getRoleColor(user.role)}`}>
-                      {getRoleLabel(user.role)}
-                    </span>
+                    {isSelf(user.id) ? (
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getRoleColor(user.role)}`}>
+                        {user.role === 'admin' ? 'Administrador' : user.role === 'supervisor' ? 'Supervisor' : 'Usuário'}
+                      </span>
+                    ) : (
+                      <select
+                        value={user.role}
+                        onChange={(e) => handleRoleChange(user.id, user.full_name, e.target.value)}
+                        className="px-2 py-1 border border-gray-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white cursor-pointer"
+                      >
+                        <option value="user">Usuário</option>
+                        <option value="supervisor">Supervisor</option>
+                        <option value="admin">Administrador</option>
+                      </select>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-sm">
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        user.is_active
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}
-                    >
-                      {user.is_active ? 'Ativo' : 'Inativo'}
-                    </span>
+                    {isSelf(user.id) ? (
+                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        Ativo
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleToggleActive(user.id, user.full_name, !!user.is_active)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                          user.is_active
+                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                            : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                        }`}
+                      >
+                        {user.is_active ? 'Ativo' : 'Inativo'}
+                      </button>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-sm">
                     <button
@@ -219,6 +311,12 @@ const AdminUserManagement: React.FC = () => {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {!loading && filteredUsers.length === 0 && users.length > 0 && (
+        <div className="text-center py-12">
+          <p className="text-gray-600">Nenhum usuário encontrado para "{searchTerm}"</p>
         </div>
       )}
 
@@ -275,13 +373,13 @@ const AdminUserManagement: React.FC = () => {
                     ? 'Digite a nova senha'
                     : resetModal.newPassword.length < 6
                     ? `${6 - resetModal.newPassword.length} caracteres faltando`
-                    : '✅ Senha válida'}
+                    : 'Senha válida'}
                 </p>
               </div>
 
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                 <p className="text-xs text-yellow-800">
-                  <strong>⚠️ Importante:</strong> Compartilhe a nova senha com o usuário de forma segura. Não reutilize esta senha para outros usuários.
+                  <strong>Importante:</strong> Compartilhe a nova senha com o usuário de forma segura. Não reutilize esta senha para outros usuários.
                 </p>
               </div>
             </div>

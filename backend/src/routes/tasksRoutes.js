@@ -6,6 +6,7 @@ import {
   createTask,
   updateTask,
   updateTaskStatus,
+  getTaskStatusHistory,
   assignUsersToTask,
   unassignUserFromTask,
   updateAssignmentDailyHours,
@@ -31,6 +32,7 @@ router.use(authenticate);
 // Rotas públicas (para usuários autenticados)
 router.get('/', getAllTasks); // Listar todas as tarefas (IMPORTANTE: deve vir antes de /:id)
 router.get('/stage/:stageId', getTasksByStage);
+router.get('/:id/status-history', getTaskStatusHistory);
 router.get('/:id', getTaskById);
 
 // Rotas protegidas (apenas supervisor/admin)

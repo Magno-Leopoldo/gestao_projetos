@@ -30,4 +30,16 @@ export const usersService = {
     const response = await apiClient.get('/users/supervisors-performance');
     return response.data.data || response.data;
   },
+
+  // Alterar role de um usuário (admin only)
+  async updateRole(userId: number, role: string) {
+    const response = await apiClient.put(`/users/${userId}/role`, { role });
+    return response.data;
+  },
+
+  // Ativar/desativar um usuário (admin only)
+  async toggleActive(userId: number) {
+    const response = await apiClient.patch(`/users/${userId}/toggle-active`);
+    return response.data;
+  },
 };

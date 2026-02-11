@@ -1,11 +1,11 @@
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Kanban, FolderKanban, BarChart3, LogOut, User } from 'lucide-react';
+import { LayoutDashboard, Kanban, FolderKanban, BarChart3, Settings, LogOut, User, CalendarDays } from 'lucide-react';
 
 type LayoutProps = {
   children: React.ReactNode;
-  currentPage: 'dashboard' | 'kanban' | 'projects' | 'monitoring';
-  onPageChange: (page: 'dashboard' | 'kanban' | 'projects' | 'monitoring') => void;
+  currentPage: 'dashboard' | 'kanban' | 'projects' | 'calendario' | 'monitoring' | 'settings';
+  onPageChange: (page: 'dashboard' | 'kanban' | 'projects' | 'calendario' | 'monitoring' | 'settings') => void;
 };
 
 export default function Layout({ children, currentPage, onPageChange }: LayoutProps) {
@@ -15,6 +15,7 @@ export default function Layout({ children, currentPage, onPageChange }: LayoutPr
   const canAccessDashboard = profile?.role === 'supervisor' || profile?.role === 'admin';
   const canAccessKanban = profile?.role === 'supervisor' || profile?.role === 'admin';
   const canAccessMonitoring = profile?.role === 'admin';
+  const canAccessSettings = profile?.role === 'admin';
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -72,6 +73,18 @@ export default function Layout({ children, currentPage, onPageChange }: LayoutPr
                   <span>Projetos</span>
                 </button>
 
+                <button
+                  onClick={() => { onPageChange('calendario'); navigate('/calendario'); }}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition ${
+                    currentPage === 'calendario'
+                      ? 'bg-blue-50 text-blue-700'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  <CalendarDays className="w-5 h-5" />
+                  <span>Calendário</span>
+                </button>
+
                 {canAccessMonitoring && (
                   <button
                     onClick={() => { onPageChange('monitoring'); navigate('/monitoramento'); }}
@@ -83,6 +96,20 @@ export default function Layout({ children, currentPage, onPageChange }: LayoutPr
                   >
                     <BarChart3 className="w-5 h-5" />
                     <span>Monitoramento</span>
+                  </button>
+                )}
+
+                {canAccessSettings && (
+                  <button
+                    onClick={() => { onPageChange('settings'); navigate('/configuracoes'); }}
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition ${
+                      currentPage === 'settings'
+                        ? 'bg-blue-50 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Settings className="w-5 h-5" />
+                    <span>Configurações</span>
                   </button>
                 )}
               </div>

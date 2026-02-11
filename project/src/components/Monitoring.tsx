@@ -92,6 +92,8 @@ interface AssignmentAnalysis {
 interface RiskTask {
   id: number;
   title: string;
+  project_id: number;
+  stage_id: number;
   project_name: string;
   supervisor_id: number;
   supervisor_name: string;
@@ -104,6 +106,9 @@ interface RiskTask {
   due_date: string | null;
   risk_level: 'critical' | 'high' | 'medium'; // 🔴 🟠 🟡
   risk_reason: string; // Por que está em risco
+  refacao_reason?: string | null;
+  refacao_changed_by?: string | null;
+  refacao_date?: string | null;
 }
 
 interface TaskWithCollaborators {
@@ -625,6 +630,8 @@ export default function Monitoring() {
                 tasks.push({
                   id: task.id,
                   title: task.title,
+                  project_id: project.id,
+                  stage_id: stage.id,
                   project_name: project.name,
                   supervisor_id: project.supervisor_id,
                   supervisor_name: supervisor?.full_name || 'N/A',
@@ -637,6 +644,9 @@ export default function Monitoring() {
                   due_date: task.due_date || null,
                   risk_level: riskLevel,
                   risk_reason: riskReason,
+                  refacao_reason: task.latest_refacao_reason || null,
+                  refacao_changed_by: task.latest_refacao_changed_by || null,
+                  refacao_date: task.latest_refacao_date || null,
                 });
               }
             }
@@ -1807,8 +1817,15 @@ export default function Monitoring() {
                         <tr key={task.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedRiskTask(task)}>
                           <td className="px-6 py-4 text-sm font-medium text-gray-900">{start + index + 1}</td>
                           <td className="px-6 py-4 text-sm">
-                            <p className="font-medium text-gray-900">{task.title}</p>
-                            <p className="text-xs text-gray-600">{task.project_name}</p>
+                            <div className="flex items-center gap-2">
+                              <span className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-xs font-mono font-semibold text-gray-600 whitespace-nowrap">
+                                P{task.project_id}E{task.stage_id}T{task.id}
+                              </span>
+                              <div>
+                                <p className="font-medium text-gray-900">{task.title}</p>
+                                <p className="text-xs text-gray-600">{task.project_name}</p>
+                              </div>
+                            </div>
                           </td>
                           <td className="px-6 py-4 text-sm">
                             <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold ${riskBgColors[task.risk_level]} ${riskTextColors[task.risk_level]}`}>
@@ -1905,7 +1922,12 @@ export default function Monitoring() {
                     ✕
                   </button>
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mt-2">{selectedRiskTask.title}</h3>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="px-2 py-0.5 bg-white border border-gray-300 rounded text-xs font-mono font-bold text-gray-700">
+                    P{selectedRiskTask.project_id}E{selectedRiskTask.stage_id}T{selectedRiskTask.id}
+                  </span>
+                  <h3 className="text-lg font-semibold text-gray-900">{selectedRiskTask.title}</h3>
+                </div>
                 <p className="text-sm text-gray-600">{selectedRiskTask.project_name}</p>
               </div>
 
@@ -1964,6 +1986,22 @@ export default function Monitoring() {
                     {selectedRiskTask.days_overdue < 0 && ` (vence em ${Math.abs(selectedRiskTask.days_overdue)} dia${Math.abs(selectedRiskTask.days_overdue) > 1 ? 's' : ''})`}
                   </p>
                 </div>
+
+                {/* Justificativa de Refação */}
+                {selectedRiskTask.refacao_reason && (
+                  <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+                    <p className="text-xs text-red-500 uppercase mb-1">Justificativa da Refação</p>
+                    <p className="text-sm font-medium text-red-800">"{selectedRiskTask.refacao_reason}"</p>
+                    <p className="text-xs text-red-500 mt-1">
+                      {selectedRiskTask.refacao_changed_by && (
+                        <>Por {selectedRiskTask.refacao_changed_by}</>
+                      )}
+                      {selectedRiskTask.refacao_date && (
+                        <> em {new Date(selectedRiskTask.refacao_date).toLocaleString('pt-BR')}</>
+                      )}
+                    </p>
+                  </div>
+                )}
 
                 {/* Progresso */}
                 <div>

@@ -10,10 +10,12 @@ import ProjectsList from './components/ProjectsList';
 import StagesView from './components/StagesView';
 import TasksList from './components/TasksList';
 import TaskDetail from './components/TaskDetail';
+import AdminUserManagement from './components/AdminUserManagement';
+import CalendarPage from './components/Calendar';
 
 function AppContent() {
   const { user, profile, loading } = useAuth();
-  const [currentPage, setCurrentPage] = useState<'dashboard' | 'kanban' | 'projects' | 'monitoring'>(() => {
+  const [currentPage, setCurrentPage] = useState<'dashboard' | 'kanban' | 'projects' | 'calendario' | 'monitoring' | 'settings'>(() => {
     if (!profile) return 'projects';
     return profile.role === 'user' ? 'projects' : 'dashboard';
   });
@@ -36,7 +38,9 @@ function AppContent() {
         {/* Pages com Layout - rotas específicas */}
         <Route path="/dashboard" element={<Layout currentPage="dashboard" onPageChange={setCurrentPage}><Dashboard /></Layout>} />
         <Route path="/kanban" element={<Layout currentPage="kanban" onPageChange={setCurrentPage}><Kanban /></Layout>} />
+        <Route path="/calendario" element={<Layout currentPage="calendario" onPageChange={setCurrentPage}><CalendarPage /></Layout>} />
         <Route path="/monitoramento" element={<Layout currentPage="monitoring" onPageChange={setCurrentPage}><Monitoring /></Layout>} />
+        <Route path="/configuracoes" element={<Layout currentPage="settings" onPageChange={setCurrentPage}><AdminUserManagement /></Layout>} />
 
         {/* Projects Navigation Flow (sem Layout) */}
         <Route path="/projects" element={<ProjectsList />} />

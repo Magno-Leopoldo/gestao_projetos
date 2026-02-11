@@ -65,8 +65,22 @@ export interface Task {
   priority: TaskPriority;
   order: number;
   due_date?: string;
+  latest_refacao_reason?: string | null;
+  latest_refacao_changed_by?: string | null;
+  latest_refacao_date?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface TaskStatusHistoryEntry {
+  id: number;
+  task_id: number;
+  from_status: TaskStatus | null;
+  to_status: TaskStatus;
+  reason: string | null;
+  changed_by: number;
+  changed_by_name: string;
+  changed_at: string;
 }
 
 export interface TaskAssignment {
@@ -261,6 +275,57 @@ export interface TimeEntryValidation {
   max_hours: number;
   active_sessions: number;
   warning_level: 'low' | 'medium' | 'high';
+}
+
+// =====================================================
+// CALENDÁRIO (FASE 6)
+// =====================================================
+
+export interface CalendarAllocation {
+  id: number;
+  task_id: number;
+  user_id: number;
+  allocation_date: string;
+  start_time: string;
+  end_time: string;
+  duration_minutes: number;
+  notes?: string;
+  task_title: string;
+  task_status: TaskStatus;
+  priority: TaskPriority;
+  project_name: string;
+  project_id: number;
+  stage_name: string;
+}
+
+export interface CalendarEvent {
+  id: number;
+  title: string;
+  start: Date;
+  end: Date;
+  resource: CalendarAllocation;
+}
+
+export interface UnallocatedTask {
+  task_id: number;
+  task_title: string;
+  project_name: string;
+  project_id: number;
+  stage_name: string;
+  priority: TaskPriority;
+  status: TaskStatus;
+  daily_hours: number;
+  estimated_hours: number;
+  total_allocated_minutes: number;
+  remaining_minutes: number;
+}
+
+export interface DailySummary {
+  total_allocated_minutes: number;
+  total_allocated_hours: number;
+  max_hours: number;
+  remaining_hours: number;
+  allocations_count: number;
 }
 
 // =====================================================

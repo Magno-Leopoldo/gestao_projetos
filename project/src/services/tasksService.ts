@@ -96,6 +96,12 @@ export const tasksService = {
     return response.data;
   },
 
+  // Obter histórico de mudanças de status
+  async getStatusHistory(taskId: number) {
+    const response = await apiClient.get(`/tasks/${taskId}/status-history`);
+    return response.data.data;
+  },
+
   // Deletar tarefa
   async delete(id: number) {
     const response = await apiClient.delete(`/tasks/${id}`);

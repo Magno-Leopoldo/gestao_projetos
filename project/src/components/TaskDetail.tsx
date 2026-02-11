@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Plus, Trash2 } from 'lucide-react';
-import { Task, TaskWithDetails, TimeEntrySession, DayStatusSummary } from '../types';
+import { Plus, Trash2, ChevronDown } from 'lucide-react';
+import { Task, TaskWithDetails, TimeEntrySession, DayStatusSummary, TaskStatusHistoryEntry, STATUS_LABELS, TaskStatus } from '../types';
 import { tasksService } from '../services/tasksService';
 import { timeEntriesService } from '../services/timeEntriesService';
 import { useAuth } from '../contexts/AuthContext';
@@ -35,6 +35,11 @@ const TaskDetail: React.FC = () => {
   const [editError, setEditError] = useState<string | null>(null);
   const [isDailyHoursDetailsOpen, setIsDailyHoursDetailsOpen] = useState(false);
   const [isProgressChartOpen, setIsProgressChartOpen] = useState(false);
+
+  // Estados para histórico de status
+  const [statusHistory, setStatusHistory] = useState<TaskStatusHistoryEntry[]>([]);
+  const [historyExpanded, setHistoryExpanded] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   // NOVO: Estados para filtros de histórico
   const [historyPeriod, setHistoryPeriod] = useState<'today' | 'week' | 'month' | 'custom' | 'all'>('all');
@@ -141,6 +146,37 @@ const TaskDetail: React.FC = () => {
     } catch (err) {
       console.error('Erro ao carregar histórico:', err);
     }
+  };
+
+  const loadStatusHistory = async () => {
+    if (!taskId || statusHistory.length > 0) return; // Já carregou
+    setHistoryLoading(true);
+    try {
+      const data = await tasksService.getStatusHistory(parseInt(taskId));
+      setStatusHistory(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar histórico de status:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const toggleHistoryExpanded = () => {
+    if (!historyExpanded) {
+      loadStatusHistory();
+    }
+    setHistoryExpanded(!historyExpanded);
+  };
+
+  const getStatusColor = (status: TaskStatus): string => {
+    const colors: Record<TaskStatus, string> = {
+      novo: 'bg-blue-500',
+      em_desenvolvimento: 'bg-yellow-500',
+      analise_tecnica: 'bg-purple-500',
+      concluido: 'bg-green-500',
+      refaca: 'bg-red-500',
+    };
+    return colors[status] || 'bg-gray-500';
   };
 
   const handleSessionChange = () => {
@@ -343,6 +379,79 @@ const TaskDetail: React.FC = () => {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Bloco de Refação + Timeline de Status */}
+            {task.status === 'refaca' && task.latest_refacao_reason && (
+              <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-red-500 text-xl mt-0.5">⚠️</span>
+                  <div className="flex-1">
+                    <h3 className="text-sm font-semibold text-red-800 mb-1">Motivo da Refação</h3>
+                    <p className="text-sm text-red-700">{task.latest_refacao_reason}</p>
+                    <p className="text-xs text-red-500 mt-2">
+                      Por {task.latest_refacao_changed_by}
+                      {task.latest_refacao_date && (
+                        <> em {new Date(task.latest_refacao_date).toLocaleString('pt-BR')}</>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Timeline de Histórico de Status */}
+            <div className="mb-6">
+              <button
+                onClick={toggleHistoryExpanded}
+                className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                <ChevronDown className={`w-4 h-4 transition-transform ${historyExpanded ? 'rotate-180' : ''}`} />
+                Histórico de Mudanças de Status
+              </button>
+
+              {historyExpanded && (
+                <div className="mt-3 bg-white border border-gray-200 rounded-lg p-4">
+                  {historyLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                      Carregando histórico...
+                    </div>
+                  ) : statusHistory.length === 0 ? (
+                    <p className="text-sm text-gray-500">Nenhuma mudança de status registrada.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {statusHistory.map((entry) => (
+                        <div key={entry.id} className="flex items-start gap-3">
+                          <div className="flex flex-col items-center">
+                            <div className={`w-3 h-3 rounded-full ${getStatusColor(entry.to_status)}`} />
+                            <div className="w-px h-full bg-gray-200 min-h-[16px]" />
+                          </div>
+                          <div className="flex-1 pb-2">
+                            <div className="flex items-center gap-2 text-sm">
+                              {entry.from_status && (
+                                <>
+                                  <span className="text-gray-500">{STATUS_LABELS[entry.from_status]}</span>
+                                  <span className="text-gray-400">→</span>
+                                </>
+                              )}
+                              <span className="font-medium text-gray-900">{STATUS_LABELS[entry.to_status]}</span>
+                            </div>
+                            {entry.reason && (
+                              <p className="text-sm text-red-700 mt-1 bg-red-50 px-2 py-1 rounded">
+                                "{entry.reason}"
+                              </p>
+                            )}
+                            <p className="text-xs text-gray-500 mt-1">
+                              {entry.changed_by_name} — {new Date(entry.changed_at).toLocaleString('pt-BR')}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Progress & Metrics */}
