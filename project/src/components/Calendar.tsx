@@ -11,6 +11,7 @@ import CalendarSidebar from './CalendarSidebar';
 import CalendarEventBlock from './CalendarEventBlock';
 import CalendarAllocationModal from './CalendarAllocationModal';
 import type { CalendarAllocation, CalendarEvent, UnallocatedTask, DailySummary, User } from '../types';
+import type { DeleteScope } from './CalendarAllocationModal';
 
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
@@ -40,6 +41,15 @@ function toTimeStr(d: Date): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+// Snap de 15min — corrige arredondamento do react-big-calendar nas bordas
+function snapTo15(d: Date): Date {
+  const snapped = new Date(d);
+  const mins = snapped.getMinutes();
+  const rounded = Math.round(mins / 15) * 15;
+  snapped.setMinutes(rounded, 0, 0);
+  return snapped;
+}
+
 type ViewType = 'day' | 'week' | 'month';
 
 const messages = {
@@ -55,7 +65,8 @@ const messages = {
 
 export default function Calendar() {
   const { profile } = useAuth();
-  const isAdminOrSupervisor = profile?.role === 'admin' || profile?.role === 'supervisor';
+  const isAdmin = profile?.role === 'admin';
+  const isAdminOrSupervisor = isAdmin || profile?.role === 'supervisor';
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<ViewType>('week');
@@ -68,6 +79,8 @@ export default function Calendar() {
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<number | undefined>(undefined);
   const isViewingOther = isAdminOrSupervisor && selectedUserId !== undefined && selectedUserId !== profile?.id;
+  // Admin pode editar calendário de outros; supervisor só visualiza
+  const isReadOnly = isViewingOther && !isAdmin;
 
   // Load users list for admin/supervisor
   useEffect(() => {
@@ -152,36 +165,38 @@ export default function Calendar() {
 
   // --- Handlers ---
 
-  // Click on empty slot → open create modal (only own calendar)
+  // Click on empty slot → open create modal
   const handleSelectSlot = useCallback(({ start, end }: { start: Date; end: Date }) => {
-    if (isViewingOther) return;
+    if (isReadOnly) return;
+    const s = snapTo15(start);
+    const e = snapTo15(end);
     setEditingAllocation(null);
     setModalDefaults({
-      date: toDateStr(start),
-      start: toTimeStr(start),
-      end: toTimeStr(end),
+      date: toDateStr(s),
+      start: toTimeStr(s),
+      end: toTimeStr(e),
     });
     setModalError(null);
     setModalOpen(true);
-  }, [isViewingOther]);
+  }, [isReadOnly]);
 
-  // Click on event → open edit modal (only own calendar)
+  // Click on event → open edit modal
   const handleSelectEvent = useCallback((event: object) => {
-    if (isViewingOther) return;
+    if (isReadOnly) return;
     const calEvent = event as CalendarEvent;
     setEditingAllocation(calEvent.resource);
     setModalDefaults({});
     setModalError(null);
     setModalOpen(true);
-  }, [isViewingOther]);
+  }, [isReadOnly]);
 
-  // Drag & drop or resize existing event (only own calendar)
+  // Drag & drop or resize existing event
   const handleEventDropOrResize = useCallback(
     async ({ event, start, end }: { event: object; start: string | Date; end: string | Date }) => {
-      if (isViewingOther) { await fetchData(); return; }
+      if (isReadOnly) { await fetchData(); return; }
       const calEvent = event as CalendarEvent;
-      const startDate = start instanceof Date ? start : new Date(start);
-      const endDate = end instanceof Date ? end : new Date(end);
+      const startDate = snapTo15(start instanceof Date ? start : new Date(start));
+      const endDate = snapTo15(end instanceof Date ? end : new Date(end));
       try {
         await calendarService.updateAllocation(calEvent.id, {
           allocation_date: toDateStr(startDate),
@@ -195,15 +210,15 @@ export default function Calendar() {
         await fetchData();
       }
     },
-    [fetchData, isViewingOther]
+    [fetchData, isReadOnly]
   );
 
-  // Drop from sidebar (only own calendar)
+  // Drop from sidebar
   const handleDropFromOutside = useCallback(
     ({ start, end }: { start: string | Date; end: string | Date }) => {
-      if (!draggedTask || isViewingOther) return;
-      const startDate = start instanceof Date ? start : new Date(start);
-      const endDate = end instanceof Date ? end : new Date(end);
+      if (!draggedTask || isReadOnly) return;
+      const startDate = snapTo15(start instanceof Date ? start : new Date(start));
+      const endDate = snapTo15(end instanceof Date ? end : new Date(end));
       setEditingAllocation(null);
       setModalDefaults({
         date: toDateStr(startDate),
@@ -215,8 +230,11 @@ export default function Calendar() {
       setModalOpen(true);
       setDraggedTask(null);
     },
-    [draggedTask, isViewingOther]
+    [draggedTask, isReadOnly]
   );
+
+  // user_id do alvo quando admin gerencia calendário de outro
+  const targetUserId = isAdmin && isViewingOther ? selectedUserId : undefined;
 
   // Save (create or update)
   const handleSave = useCallback(
@@ -233,7 +251,7 @@ export default function Calendar() {
           const result = await calendarService.updateAllocation(editingAllocation.id, data);
           if (result.warning) alert(result.warning);
         } else {
-          const result = await calendarService.createAllocation(data);
+          const result = await calendarService.createAllocation({ ...data, user_id: targetUserId });
           if (result.warning) alert(result.warning);
         }
         setModalOpen(false);
@@ -245,7 +263,7 @@ export default function Calendar() {
         throw err;
       }
     },
-    [editingAllocation, fetchData]
+    [editingAllocation, fetchData, targetUserId]
   );
 
   // Save batch (multiple days)
@@ -261,7 +279,7 @@ export default function Calendar() {
     }) => {
       setModalError(null);
       try {
-        const result = await calendarService.createBatchAllocations(data);
+        const result = await calendarService.createBatchAllocations({ ...data, user_id: targetUserId });
         if (result.data.failed > 0) {
           const failedDates = result.data.results
             .filter((r) => !r.success)
@@ -278,14 +296,25 @@ export default function Calendar() {
         throw err;
       }
     },
-    [fetchData]
+    [fetchData, targetUserId]
   );
 
-  // Delete
+  // Delete with scope
   const handleDelete = useCallback(
-    async (id: number) => {
+    async (id: number, scope: DeleteScope) => {
       try {
-        await calendarService.deleteAllocation(id);
+        if (scope === 'single') {
+          await calendarService.deleteAllocation(id);
+        } else {
+          // 'day' or 'task' — use batch delete with the editing allocation's info
+          if (!editingAllocation) return;
+          await calendarService.deleteBatchAllocations({
+            scope,
+            task_id: editingAllocation.task_id,
+            allocation_date: scope === 'day' ? editingAllocation.allocation_date.slice(0, 10) : undefined,
+            user_id: targetUserId,
+          });
+        }
         setModalOpen(false);
         setEditingAllocation(null);
         await fetchData();
@@ -294,7 +323,7 @@ export default function Calendar() {
         setModalError(msg);
       }
     },
-    [fetchData]
+    [fetchData, editingAllocation, targetUserId]
   );
 
   // Drag from outside requires this
@@ -313,17 +342,17 @@ export default function Calendar() {
 
   return (
     <div className="h-[calc(100vh-8rem)]">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold text-gray-900">Calendário</h1>
+      {/* Header compacto */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold text-gray-900">Calendário</h1>
           {isAdminOrSupervisor && users.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Eye className="w-4 h-4 text-gray-500" />
+            <div className="flex items-center gap-2 pl-3 border-l border-gray-200">
+              <Eye className="w-3.5 h-3.5 text-gray-400" />
               <select
                 value={selectedUserId ?? ''}
                 onChange={(e) => setSelectedUserId(e.target.value ? Number(e.target.value) : undefined)}
-                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                className="px-2.5 py-1 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-gray-700"
               >
                 <option value="">Meu calendário</option>
                 {users
@@ -335,9 +364,15 @@ export default function Calendar() {
                   ))}
               </select>
               {isViewingOther && (
-                <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full font-medium">
-                  Somente visualização
-                </span>
+                isAdmin ? (
+                  <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-medium">
+                    Gerenciando
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded font-medium">
+                    Visualização
+                  </span>
+                )
               )}
             </div>
           )}
@@ -345,15 +380,15 @@ export default function Calendar() {
         <button
           onClick={fetchData}
           disabled={loading}
-          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition disabled:opacity-50"
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           Atualizar
         </button>
       </div>
 
       {/* Main content */}
-      <div className="flex bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden" style={{ height: 'calc(100% - 3.5rem)' }}>
+      <div className="flex bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden" style={{ height: 'calc(100% - 2.75rem)' }}>
         {/* Sidebar */}
         <CalendarSidebar
           tasks={unallocatedTasks}
@@ -362,7 +397,7 @@ export default function Calendar() {
         />
 
         {/* Calendar */}
-        <div className="flex-1 p-2 overflow-hidden calendar-container">
+        <div className="flex-1 overflow-hidden">
           <DnDCalendar
             localizer={localizer}
             culture="pt-BR"
@@ -377,15 +412,15 @@ export default function Calendar() {
             max={new Date(2000, 0, 1, 19, 0)}
             step={15}
             timeslots={4}
-            selectable={!isViewingOther}
-            resizable={!isViewingOther}
-            draggableAccessor={() => !isViewingOther}
+            selectable={!isReadOnly}
+            resizable={!isReadOnly}
+            draggableAccessor={() => !isReadOnly}
             onSelectSlot={handleSelectSlot}
             onSelectEvent={handleSelectEvent}
             onEventDrop={handleEventDropOrResize}
             onEventResize={handleEventDropOrResize}
-            onDropFromOutside={isViewingOther ? undefined : handleDropFromOutside}
-            dragFromOutsideItem={isViewingOther ? undefined : dragFromOutsideItem}
+            onDropFromOutside={isReadOnly ? undefined : handleDropFromOutside}
+            dragFromOutsideItem={isReadOnly ? undefined : dragFromOutsideItem}
             messages={messages}
             components={components}
             style={{ height: '100%' }}

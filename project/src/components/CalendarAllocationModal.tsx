@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, Trash2, AlertTriangle, CalendarRange, Copy } from 'lucide-react';
+import { X, Trash2, AlertTriangle, CalendarRange, Copy, ChevronDown } from 'lucide-react';
 import type { CalendarAllocation, UnallocatedTask } from '../types';
 import TimeRangeSlider from './TimeRangeSlider';
 
@@ -21,12 +21,14 @@ interface SaveBatchData {
   skip_weekends?: boolean;
 }
 
+export type DeleteScope = 'single' | 'day' | 'task';
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   onSave: (data: SaveSingleData) => Promise<void>;
   onSaveBatch?: (data: SaveBatchData) => Promise<void>;
-  onDelete?: (id: number) => Promise<void>;
+  onDelete?: (id: number, scope: DeleteScope) => Promise<void>;
   tasks: UnallocatedTask[];
   allocation?: CalendarAllocation | null;
   defaultDate?: string;
@@ -75,6 +77,7 @@ export default function CalendarAllocationModal({
   const [skipWeekends, setSkipWeekends] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteMenuOpen, setDeleteMenuOpen] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -95,6 +98,7 @@ export default function CalendarAllocationModal({
     }
     setLocalError(null);
     setSkipWeekends(true);
+    setDeleteMenuOpen(false);
   }, [allocation, defaultDate, defaultStart, defaultEnd, defaultTaskId, isOpen]);
 
   const isMultiDay = startDate && endDate && startDate !== endDate;
@@ -103,7 +107,6 @@ export default function CalendarAllocationModal({
     [startDate, endDate, skipWeekends]
   );
 
-  // Calcular duração
   const durationMin = (() => {
     if (!startTime || !endTime) return 0;
     const [sh, sm] = startTime.split(':').map(Number);
@@ -153,11 +156,12 @@ export default function CalendarAllocationModal({
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = async (scope: DeleteScope) => {
     if (!allocation || !onDelete) return;
     setDeleting(true);
+    setDeleteMenuOpen(false);
     try {
-      await onDelete(allocation.id);
+      await onDelete(allocation.id, scope);
     } finally {
       setDeleting(false);
     }
@@ -166,6 +170,11 @@ export default function CalendarAllocationModal({
   if (!isOpen) return null;
 
   const displayError = error || localError;
+
+  // Formatar data para exibição
+  const allocationDateLabel = allocation
+    ? new Date(allocation.allocation_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+    : '';
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -299,14 +308,44 @@ export default function CalendarAllocationModal({
         <div className="flex items-center justify-between p-4 border-t border-gray-200">
           <div>
             {isEdit && onDelete && (
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
-              >
-                <Trash2 className="w-4 h-4" />
-                {deleting ? 'Removendo...' : 'Remover'}
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setDeleteMenuOpen(!deleteMenuOpen)}
+                  disabled={deleting}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {deleting ? 'Removendo...' : 'Remover'}
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${deleteMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {deleteMenuOpen && (
+                  <div className="absolute bottom-full left-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 w-56 z-10">
+                    <button
+                      onClick={() => handleDelete('single')}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
+                    >
+                      <div className="font-medium">Somente esta</div>
+                      <div className="text-xs text-gray-400">Remove apenas esta alocação</div>
+                    </button>
+                    <button
+                      onClick={() => handleDelete('day')}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
+                    >
+                      <div className="font-medium">Todas do dia ({allocationDateLabel})</div>
+                      <div className="text-xs text-gray-400">Remove esta tarefa do dia inteiro</div>
+                    </button>
+                    <div className="border-t border-gray-100 my-1" />
+                    <button
+                      onClick={() => handleDelete('task')}
+                      className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition"
+                    >
+                      <div className="font-medium">Todas da tarefa</div>
+                      <div className="text-xs text-red-400">Remove todas as alocações desta tarefa</div>
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
           <div className="flex gap-2">

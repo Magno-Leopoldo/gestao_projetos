@@ -6,6 +6,7 @@ import {
   createBatchCalendarAllocations,
   updateCalendarAllocation,
   deleteCalendarAllocation,
+  deleteBatchCalendarAllocations,
   getDailySummary,
 } from '../controllers/calendarController.js';
 import { authenticate } from '../middleware/auth.js';
@@ -21,6 +22,7 @@ router.get('/daily-summary', getDailySummary);
 router.post('/allocations', createCalendarAllocation);
 router.post('/allocations/batch', createBatchCalendarAllocations);
 router.put('/allocations/:id', updateCalendarAllocation);
+router.post('/allocations/delete-batch', deleteBatchCalendarAllocations);
 router.delete('/allocations/:id', deleteCalendarAllocation);
 
 export default router;

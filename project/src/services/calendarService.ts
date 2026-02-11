@@ -23,6 +23,7 @@ export const calendarService = {
     start_time: string;
     end_time: string;
     notes?: string;
+    user_id?: number;
   }) {
     const response = await apiClient.post('/calendar/allocations', data);
     return response.data as { success: boolean; data: CalendarAllocation; warning?: string };
@@ -36,6 +37,7 @@ export const calendarService = {
     end_time: string;
     notes?: string;
     skip_weekends?: boolean;
+    user_id?: number;
   }) {
     const response = await apiClient.post('/calendar/allocations/batch', data);
     return response.data as {
@@ -58,6 +60,16 @@ export const calendarService = {
   async deleteAllocation(id: number) {
     const response = await apiClient.delete(`/calendar/allocations/${id}`);
     return response.data;
+  },
+
+  async deleteBatchAllocations(data: {
+    scope: 'day' | 'task';
+    task_id: number;
+    allocation_date?: string;
+    user_id?: number;
+  }) {
+    const response = await apiClient.post('/calendar/allocations/delete-batch', data);
+    return response.data as { success: boolean; message: string; deleted: number };
   },
 
   async getDailySummary(date: string, userId?: number) {

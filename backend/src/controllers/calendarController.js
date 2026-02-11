@@ -14,17 +14,11 @@ export const getCalendarAllocations = async (req, res, next) => {
       });
     }
 
-    let whereConditions = ['ca.allocation_date >= ?', 'ca.allocation_date <= ?'];
-    let params = [start_date, end_date];
+    // Admin/supervisor podem ver calendário de outro; caso contrário, sempre o próprio
+    const targetUserId = (role === 'user') ? currentUserId : (user_id || currentUserId);
 
-    // Se role=user, força ver apenas suas alocações
-    if (role === 'user') {
-      whereConditions.push('ca.user_id = ?');
-      params.push(currentUserId);
-    } else if (user_id) {
-      whereConditions.push('ca.user_id = ?');
-      params.push(user_id);
-    }
+    let whereConditions = ['ca.allocation_date >= ?', 'ca.allocation_date <= ?', 'ca.user_id = ?'];
+    let params = [start_date, end_date, targetUserId];
 
     const allocations = await query(
       `SELECT
@@ -96,8 +90,11 @@ export const getUnallocatedTasks = async (req, res, next) => {
 // POST /api/calendar/allocations
 export const createCalendarAllocation = async (req, res, next) => {
   try {
-    const { task_id, allocation_date, start_time, end_time, notes } = req.body;
-    const { id: currentUserId } = req.user;
+    const { task_id, allocation_date, start_time, end_time, notes, user_id } = req.body;
+    const { id: currentUserId, role } = req.user;
+
+    // Admin pode criar para outro usuário
+    const targetUserId = (role === 'admin' && user_id) ? user_id : currentUserId;
 
     // Validação de campos obrigatórios
     if (!task_id || !allocation_date || !start_time || !end_time) {
@@ -108,20 +105,20 @@ export const createCalendarAllocation = async (req, res, next) => {
       });
     }
 
-    // Verificar se a tarefa existe e o user está atribuído
+    // Verificar se a tarefa existe e o user-alvo está atribuído
     const assignments = await query(
       `SELECT ta.id, t.status
        FROM task_assignments ta
        INNER JOIN tasks t ON ta.task_id = t.id
        WHERE ta.task_id = ? AND ta.user_id = ?`,
-      [task_id, currentUserId]
+      [task_id, targetUserId]
     );
 
     if (assignments.length === 0) {
       return res.status(403).json({
         success: false,
         error: 'FORBIDDEN',
-        message: 'Você não está atribuído a esta tarefa',
+        message: 'Usuário não está atribuído a esta tarefa',
       });
     }
 
@@ -160,7 +157,7 @@ export const createCalendarAllocation = async (req, res, next) => {
        FROM calendar_allocations
        WHERE user_id = ? AND allocation_date = ?
          AND start_time < ? AND end_time > ?`,
-      [currentUserId, allocation_date, end_time, start_time]
+      [targetUserId, allocation_date, end_time, start_time]
     );
 
     if (overlaps.length > 0) {
@@ -176,7 +173,7 @@ export const createCalendarAllocation = async (req, res, next) => {
     const result = await query(
       `INSERT INTO calendar_allocations (task_id, user_id, allocation_date, start_time, end_time, duration_minutes, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [task_id, currentUserId, allocation_date, start_time, end_time, duration_minutes, notes || null]
+      [task_id, targetUserId, allocation_date, start_time, end_time, duration_minutes, notes || null]
     );
 
     // Warning se total diário > 480min (8h)
@@ -184,7 +181,7 @@ export const createCalendarAllocation = async (req, res, next) => {
       `SELECT COALESCE(SUM(duration_minutes), 0) AS total
        FROM calendar_allocations
        WHERE user_id = ? AND allocation_date = ?`,
-      [currentUserId, allocation_date]
+      [targetUserId, allocation_date]
     );
 
     const warning = dailyTotal[0].total > 480
@@ -224,13 +221,12 @@ export const updateCalendarAllocation = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { allocation_date, start_time, end_time, notes } = req.body;
-    const { id: currentUserId } = req.user;
+    const { id: currentUserId, role } = req.user;
 
-    // Verificar se a alocação existe e pertence ao user
-    const existing = await query(
-      'SELECT * FROM calendar_allocations WHERE id = ? AND user_id = ?',
-      [id, currentUserId]
-    );
+    // Admin pode editar alocações de qualquer usuário
+    const existing = role === 'admin'
+      ? await query('SELECT * FROM calendar_allocations WHERE id = ?', [id])
+      : await query('SELECT * FROM calendar_allocations WHERE id = ? AND user_id = ?', [id, currentUserId]);
 
     if (existing.length === 0) {
       return res.status(404).json({
@@ -239,6 +235,8 @@ export const updateCalendarAllocation = async (req, res, next) => {
         message: 'Alocação não encontrada',
       });
     }
+
+    const allocationOwnerId = existing[0].user_id;
 
     const newDate = allocation_date || existing[0].allocation_date;
     const newStart = start_time || existing[0].start_time;
@@ -272,7 +270,7 @@ export const updateCalendarAllocation = async (req, res, next) => {
        WHERE user_id = ? AND allocation_date = ?
          AND start_time < ? AND end_time > ?
          AND id != ?`,
-      [currentUserId, newDate, newEnd, newStart, id]
+      [allocationOwnerId, newDate, newEnd, newStart, id]
     );
 
     if (overlaps.length > 0) {
@@ -315,7 +313,7 @@ export const updateCalendarAllocation = async (req, res, next) => {
       `SELECT COALESCE(SUM(duration_minutes), 0) AS total
        FROM calendar_allocations
        WHERE user_id = ? AND allocation_date = ?`,
-      [currentUserId, newDate]
+      [allocationOwnerId, newDate]
     );
 
     const warning = dailyTotal[0].total > 480
@@ -332,12 +330,12 @@ export const updateCalendarAllocation = async (req, res, next) => {
 export const deleteCalendarAllocation = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { id: currentUserId } = req.user;
+    const { id: currentUserId, role } = req.user;
 
-    const existing = await query(
-      'SELECT * FROM calendar_allocations WHERE id = ? AND user_id = ?',
-      [id, currentUserId]
-    );
+    // Admin pode deletar alocações de qualquer usuário
+    const existing = role === 'admin'
+      ? await query('SELECT * FROM calendar_allocations WHERE id = ?', [id])
+      : await query('SELECT * FROM calendar_allocations WHERE id = ? AND user_id = ?', [id, currentUserId]);
 
     if (existing.length === 0) {
       return res.status(404).json({
@@ -355,12 +353,84 @@ export const deleteCalendarAllocation = async (req, res, next) => {
   }
 };
 
+// DELETE /api/calendar/allocations/batch
+// Remove alocações por escopo: 'day' (todas do dia) ou 'task' (todas da tarefa)
+export const deleteBatchCalendarAllocations = async (req, res, next) => {
+  try {
+    const { scope, task_id, allocation_date, user_id } = req.body;
+    const { id: currentUserId, role } = req.user;
+
+    // Admin pode deletar alocações de outro usuário
+    const targetUserId = (role === 'admin' && user_id) ? user_id : currentUserId;
+
+    if (!scope || !task_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'VALIDATION_ERROR',
+        message: 'scope e task_id são obrigatórios',
+      });
+    }
+
+    let whereClause;
+    let params;
+
+    if (scope === 'day') {
+      if (!allocation_date) {
+        return res.status(400).json({
+          success: false,
+          error: 'VALIDATION_ERROR',
+          message: 'allocation_date é obrigatório para scope=day',
+        });
+      }
+      whereClause = 'user_id = ? AND task_id = ? AND allocation_date = ?';
+      params = [targetUserId, task_id, allocation_date];
+    } else if (scope === 'task') {
+      whereClause = 'user_id = ? AND task_id = ?';
+      params = [targetUserId, task_id];
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: 'VALIDATION_ERROR',
+        message: "scope deve ser 'day' ou 'task'",
+      });
+    }
+
+    // Contar antes de deletar
+    const countResult = await query(
+      `SELECT COUNT(*) AS total FROM calendar_allocations WHERE ${whereClause}`,
+      params
+    );
+    const total = countResult[0].total;
+
+    if (total === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'NOT_FOUND',
+        message: 'Nenhuma alocação encontrada',
+      });
+    }
+
+    await query(`DELETE FROM calendar_allocations WHERE ${whereClause}`, params);
+
+    res.json({
+      success: true,
+      message: `${total} alocação(ões) removida(s)`,
+      deleted: total,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // POST /api/calendar/allocations/batch
 // Cria alocações para múltiplos dias (mesmo horário)
 export const createBatchCalendarAllocations = async (req, res, next) => {
   try {
-    const { task_id, start_date, end_date, start_time, end_time, notes, skip_weekends } = req.body;
-    const { id: currentUserId } = req.user;
+    const { task_id, start_date, end_date, start_time, end_time, notes, skip_weekends, user_id } = req.body;
+    const { id: currentUserId, role } = req.user;
+
+    // Admin pode criar para outro usuário
+    const targetUserId = (role === 'admin' && user_id) ? user_id : currentUserId;
 
     if (!task_id || !start_date || !end_date || !start_time || !end_time) {
       return res.status(400).json({
@@ -370,20 +440,20 @@ export const createBatchCalendarAllocations = async (req, res, next) => {
       });
     }
 
-    // Verificar se a tarefa existe e o user está atribuído
+    // Verificar se a tarefa existe e o user-alvo está atribuído
     const assignments = await query(
       `SELECT ta.id, t.status
        FROM task_assignments ta
        INNER JOIN tasks t ON ta.task_id = t.id
        WHERE ta.task_id = ? AND ta.user_id = ?`,
-      [task_id, currentUserId]
+      [task_id, targetUserId]
     );
 
     if (assignments.length === 0) {
       return res.status(403).json({
         success: false,
         error: 'FORBIDDEN',
-        message: 'Você não está atribuído a esta tarefa',
+        message: 'Usuário não está atribuído a esta tarefa',
       });
     }
 
@@ -440,7 +510,7 @@ export const createBatchCalendarAllocations = async (req, res, next) => {
          FROM calendar_allocations
          WHERE user_id = ? AND allocation_date = ?
            AND start_time < ? AND end_time > ?`,
-        [currentUserId, dateStr, end_time, start_time]
+        [targetUserId, dateStr, end_time, start_time]
       );
 
       if (overlaps.length > 0) {
@@ -451,7 +521,7 @@ export const createBatchCalendarAllocations = async (req, res, next) => {
       await query(
         `INSERT INTO calendar_allocations (task_id, user_id, allocation_date, start_time, end_time, duration_minutes, notes)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [task_id, currentUserId, dateStr, start_time, end_time, duration_minutes, notes || null]
+        [task_id, targetUserId, dateStr, start_time, end_time, duration_minutes, notes || null]
       );
       results.push({ date: dateStr, success: true });
     }
