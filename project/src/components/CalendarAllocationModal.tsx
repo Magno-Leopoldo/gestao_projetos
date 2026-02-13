@@ -171,9 +171,9 @@ export default function CalendarAllocationModal({
 
   const displayError = error || localError;
 
-  // Formatar data para exibição
+  // Formatar data para exibição (allocation_date vem como ISO string do backend)
   const allocationDateLabel = allocation
-    ? new Date(allocation.allocation_date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+    ? new Date(allocation.allocation_date.slice(0, 10) + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
     : '';
 
   return (

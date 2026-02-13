@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Calendar as BigCalendar, dateFnsLocalizer, Views } from 'react-big-calendar';
 import withDragAndDrop from 'react-big-calendar/lib/addons/dragAndDrop';
 import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth, addDays, subDays } from 'date-fns';
@@ -101,6 +101,9 @@ export default function Calendar() {
   // Dragging from sidebar
   const [draggedTask, setDraggedTask] = useState<UnallocatedTask | null>(null);
 
+  // Evitar race condition: ignorar respostas de requests antigos
+  const fetchIdRef = useRef(0);
+
   // Convert allocations to events
   const events: CalendarEvent[] = useMemo(
     () =>
@@ -129,6 +132,7 @@ export default function Calendar() {
 
   // Fetch allocations & sidebar data
   const fetchData = useCallback(async () => {
+    const thisId = ++fetchIdRef.current;
     setLoading(true);
     try {
       const range = getRange(currentDate, view);
@@ -136,19 +140,25 @@ export default function Calendar() {
         calendarService.getAllocations(range.start, range.end, selectedUserId),
         calendarService.getUnallocatedTasks(selectedUserId),
       ]);
+      // Ignorar resposta se uma navegação mais recente já disparou outro fetch
+      if (thisId !== fetchIdRef.current) return;
       setAllocations(allocs);
       setUnallocatedTasks(tasks);
     } catch (err) {
+      if (thisId !== fetchIdRef.current) return;
       console.error('Erro ao carregar calendário:', err);
     } finally {
-      setLoading(false);
+      if (thisId === fetchIdRef.current) setLoading(false);
     }
   }, [currentDate, view, getRange, selectedUserId]);
 
   // Fetch daily summary
+  const summaryIdRef = useRef(0);
   const fetchSummary = useCallback(async (d: Date) => {
+    const thisId = ++summaryIdRef.current;
     try {
       const s = await calendarService.getDailySummary(toDateStr(d), selectedUserId);
+      if (thisId !== summaryIdRef.current) return;
       setSummary(s);
     } catch {
       // ignore
